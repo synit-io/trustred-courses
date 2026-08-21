@@ -1,0 +1,31 @@
+services:
+  web:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    environment:
+      APP_NAME: "${APP_NAME:-Aid Org Courses}"
+      APP_BASE_URL: "${APP_BASE_URL:-http://localhost:8000}"
+      KV_PATH: "${KV_PATH:-.data/aid-org-courses.kv}"
+      INITIAL_ADMIN_EMAIL: "${INITIAL_ADMIN_EMAIL:-admin@example.org}"
+      AUTH_COOKIE_NAME: "${AUTH_COOKIE_NAME:-session}"
+      AUTH_COOKIE_SECURE: "${AUTH_COOKIE_SECURE:-false}"
+      AUTH_DEV_EXPOSE_MAGIC_LINK: "${AUTH_DEV_EXPOSE_MAGIC_LINK:-false}"
+      AUTH_RATE_LIMIT_MAX_ATTEMPTS: "${AUTH_RATE_LIMIT_MAX_ATTEMPTS:-5}"
+      AUTH_RATE_LIMIT_WINDOW_MINUTES: "${AUTH_RATE_LIMIT_WINDOW_MINUTES:-15}"
+      AUTH_RATE_LIMIT_BLOCK_MINUTES: "${AUTH_RATE_LIMIT_BLOCK_MINUTES:-15}"
+      MAGIC_LINK_TTL_MINUTES: "${MAGIC_LINK_TTL_MINUTES:-15}"
+      SESSION_IDLE_TTL_DAYS: "${SESSION_IDLE_TTL_DAYS:-7}"
+      SESSION_ABSOLUTE_TTL_DAYS: "${SESSION_ABSOLUTE_TTL_DAYS:-30}"
+      SMTP_HOST: "${SMTP_HOST:-}"
+      SMTP_PORT: "${SMTP_PORT:-587}"
+      SMTP_USER: "${SMTP_USER:-}"
+      SMTP_PASS: "${SMTP_PASS:-}"
+      SMTP_SECURE: "${SMTP_SECURE:-false}"
+      MAIL_FROM_ADDRESS: "${MAIL_FROM_ADDRESS:-}"
+      MAIL_FROM_NAME: "${MAIL_FROM_NAME:-Aid Org Courses}"
+      MAIL_ADMIN_NOTIFICATION_TO: "${MAIL_ADMIN_NOTIFICATION_TO:-}"
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./.data:/app/.data

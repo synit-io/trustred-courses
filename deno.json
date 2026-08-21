@@ -1,0 +1,50 @@
+{
+  "nodeModulesDir": "auto",
+  "tasks": {
+    "css": "deno run -A npm:@tailwindcss/cli -i ./assets/styles.css -o ./static/app.css",
+    "check": "deno fmt --check . && deno lint . && deno check entrypoints/local.ts",
+    "dev": "deno task css && deno run -A --watch --unstable-kv --unstable-cron entrypoints/local.ts",
+    "dev:clean": "rm -rf node_modules static/app.css && deno cache --reload entrypoints/local.ts && deno task dev",
+    "build": "deno task check",
+    "docker:build": "docker build -t trustred-courses:latest .",
+    "start": "deno task css && deno run -A --unstable-kv --unstable-cron entrypoints/local.ts",
+    "seed": "deno run -A --unstable-kv scripts/seed.ts",
+    "smtp:test": "deno run -A scripts/test_smtp.ts",
+    "test": "deno test --allow-read --allow-write --allow-env --unstable-kv tests",
+    "e2e": "deno run -A e2e/run.ts",
+    "update": "deno outdated --update --latest"
+  },
+  "lint": {
+    "rules": {
+      "tags": [
+        "recommended"
+      ]
+    }
+  },
+  "exclude": [
+    "static/app.css"
+  ],
+  "unstable": [
+    "kv",
+    "cron"
+  ],
+  "imports": {
+    "@/": "./",
+    "@synitio/kv-magic-link-auth": "jsr:@synitio/kv-magic-link-auth@^0.2.1",
+    "@std/assert": "jsr:@std/assert@^1.0.19",
+    "hono": "jsr:@hono/hono@^4.13.2",
+    "nodemailer": "npm:nodemailer@9.0.5",
+    "tailwindcss": "npm:tailwindcss@4.3.3"
+  },
+  "compilerOptions": {
+    "lib": [
+      "dom",
+      "dom.asynciterable",
+      "dom.iterable",
+      "deno.ns",
+      "deno.unstable"
+    ],
+    "jsx": "react-jsx",
+    "jsxImportSource": "hono/jsx"
+  }
+}

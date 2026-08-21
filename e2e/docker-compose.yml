@@ -1,0 +1,30 @@
+services:
+  mailpit:
+    image: axllent/mailpit:v1.29
+    ports:
+      - "11025:1025"
+      - "18025:8025"
+
+  trustred-courses:
+    build:
+      context: ..
+      dockerfile: e2e/Dockerfile
+    depends_on:
+      - mailpit
+    environment:
+      PORT: "8000"
+      APP_BASE_URL: "http://127.0.0.1:18000"
+      KV_PATH: "/tmp/trustred-courses-e2e.kv"
+      INITIAL_ADMIN_EMAIL: "admin@example.org"
+      AUTH_COOKIE_SECURE: "false"
+      AUTH_DEV_EXPOSE_MAGIC_LINK: "false"
+      SMTP_HOST: "mailpit"
+      SMTP_PORT: "1025"
+      SMTP_USER: "mailpit-user"
+      SMTP_PASS: "mailpit-pass"
+      SMTP_SECURE: "false"
+      MAIL_FROM_ADDRESS: "no-reply@example.org"
+      MAIL_FROM_NAME: "TrustRed Courses E2E"
+      MAIL_ADMIN_NOTIFICATION_TO: ""
+    ports:
+      - "18000:8000"
