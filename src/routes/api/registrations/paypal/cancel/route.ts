@@ -33,6 +33,18 @@ export const registrationPayPalCancelRoute = new Hono<AppEnv>().get(
         303,
       );
     }
+    if (pending.status === "finalized") {
+      return c.redirect(
+        `/courses/${pending.courseId}?payment_success=1`,
+        303,
+      );
+    }
+    if (pending.status === "captured") {
+      return c.redirect(
+        `/courses/${pending.courseId}?course_error=Zahlung+wird+verarbeitet`,
+        303,
+      );
+    }
     await deletePendingPaidRegistration(state);
     return c.redirect(
       `/courses/${pending.courseId}?payment_cancelled=1`,

@@ -170,7 +170,9 @@ export const courseDetailsPage = new Hono<AppEnv>().get(
               </li>
               <li class="fact-tile">
                 <strong class="metric-value block">Information</strong>
-                Bei voller Auslastung erfolgt die Aufnahme in die Warteliste.
+                {course.waitingListEnabled
+                  ? "Bei voller Auslastung erfolgt die Aufnahme in die Warteliste."
+                  : "Bei voller Auslastung sind keine weiteren Anmeldungen möglich."}
               </li>
               <li class="fact-tile">
                 <strong class="metric-value block">Bearbeitung</strong>
@@ -277,7 +279,7 @@ export const courseDetailsPage = new Hono<AppEnv>().get(
               )
               : null}
 
-            {regWindow.open
+            {regWindow.open && (!seats.full || course.waitingListEnabled)
               ? (
                 <form
                   class="mt-4 grid gap-3 sm:grid-cols-2"

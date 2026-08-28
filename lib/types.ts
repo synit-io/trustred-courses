@@ -139,4 +139,7 @@ export interface EmailOutboxJob {
   nextAttemptAt: string;
   createdAt: string;
   lastError: string | null;
+  eventKey?: string;
+  leaseOwner?: string | null;
+  leaseExpiresAt?: string | null;
 }

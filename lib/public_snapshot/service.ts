@@ -201,65 +201,89 @@ async function upsertCourseIntoHomeSnapshot(
   kv: Deno.Kv,
   detailSnapshot: PublicCourseDetailSnapshot,
 ): Promise<PublicHomeSnapshot> {
-  const generatedAt = detailSnapshot.generatedAt;
-  const currentHome = await ensureHomeSnapshot(kv);
-  const nextCourses = currentHome.courses.filter((course) =>
-    course.id !== detailSnapshot.course.id
-  );
-  if (isVisibleOnPublicHome(detailSnapshot.course)) {
-    nextCourses.push({
-      ...detailSnapshot.course,
-      seats: detailSnapshot.seats,
-    });
+  for (let attempt = 0; attempt < 5; attempt += 1) {
+    let homeEntry = await kv.get<PublicHomeSnapshot>(
+      ["public_snapshot", "home"],
+      { consistency: "strong" },
+    );
+    if (!homeEntry.value) {
+      await ensureHomeSnapshot(kv);
+      homeEntry = await kv.get<PublicHomeSnapshot>(
+        ["public_snapshot", "home"],
+        { consistency: "strong" },
+      );
+    }
+    const nextCourses = (homeEntry.value?.courses ?? []).filter((course) =>
+      course.id !== detailSnapshot.course.id
+    );
+    if (isVisibleOnPublicHome(detailSnapshot.course)) {
+      nextCourses.push({
+        ...detailSnapshot.course,
+        seats: detailSnapshot.seats,
+      });
+    }
+    const nextHome: PublicHomeSnapshot = {
+      generatedAt: detailSnapshot.generatedAt,
+      courses: sortHomeCourses(nextCourses),
+    };
+    const commit = await kv.atomic()
+      .check(homeEntry)
+      .set(
+        ["public_snapshot", "meta"],
+        {
+          schemaVersion: 1,
+          generatedAt: detailSnapshot.generatedAt,
+        } satisfies PublicSnapshotMeta,
+      )
+      .set(["public_snapshot", "home"], nextHome)
+      .set(
+        ["public_snapshot", "course", detailSnapshot.course.id],
+        detailSnapshot,
+      )
+      .commit();
+    if (commit.ok) return nextHome;
   }
-
-  const nextHome: PublicHomeSnapshot = {
-    generatedAt,
-    courses: sortHomeCourses(nextCourses),
-  };
-
-  await kv.atomic()
-    .set(
-      ["public_snapshot", "meta"],
-      {
-        schemaVersion: 1,
-        generatedAt,
-      } satisfies PublicSnapshotMeta,
-    )
-    .set(["public_snapshot", "home"], nextHome)
-    .set(
-      ["public_snapshot", "course", detailSnapshot.course.id],
-      detailSnapshot,
-    )
-    .commit();
-
-  return nextHome;
+  throw new Error("Public snapshot update conflicted repeatedly.");
 }
 
 async function removeCourseFromSnapshots(
   kv: Deno.Kv,
   courseId: string,
 ): Promise<PublicHomeSnapshot> {
-  const generatedAt = new Date().toISOString();
-  const currentHome = await ensureHomeSnapshot(kv);
-  const nextHome: PublicHomeSnapshot = {
-    generatedAt,
-    courses: currentHome.courses.filter((course) => course.id !== courseId),
-  };
-
-  await kv.atomic()
-    .set(
-      ["public_snapshot", "meta"],
-      {
-        schemaVersion: 1,
-        generatedAt,
-      } satisfies PublicSnapshotMeta,
-    )
-    .set(["public_snapshot", "home"], nextHome)
-    .delete(["public_snapshot", "course", courseId])
-    .commit();
-
-  return nextHome;
+  for (let attempt = 0; attempt < 5; attempt += 1) {
+    let homeEntry = await kv.get<PublicHomeSnapshot>(
+      ["public_snapshot", "home"],
+      { consistency: "strong" },
+    );
+    if (!homeEntry.value) {
+      await ensureHomeSnapshot(kv);
+      homeEntry = await kv.get<PublicHomeSnapshot>(
+        ["public_snapshot", "home"],
+        { consistency: "strong" },
+      );
+    }
+    const generatedAt = new Date().toISOString();
+    const nextHome: PublicHomeSnapshot = {
+      generatedAt,
+      courses: (homeEntry.value?.courses ?? []).filter((course) =>
+        course.id !== courseId
+      ),
+    };
+    const commit = await kv.atomic()
+      .check(homeEntry)
+      .set(
+        ["public_snapshot", "meta"],
+        {
+          schemaVersion: 1,
+          generatedAt,
+        } satisfies PublicSnapshotMeta,
+      )
+      .set(["public_snapshot", "home"], nextHome)
+      .delete(["public_snapshot", "course", courseId])
+      .commit();
+    if (commit.ok) return nextHome;
+  }
+  throw new Error("Public snapshot removal conflicted repeatedly.");
 }
 
 export async function rebuildPublicHomeSnapshot(): Promise<PublicHomeSnapshot> {

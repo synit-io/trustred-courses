@@ -44,6 +44,32 @@ export async function enqueueEmailOutbox(
   return job;
 }
 
+export async function enqueueEmailOutboxOnce(
+  eventKey: string,
+  entry: Omit<EmailOutboxJob, "id" | "createdAt" | "eventKey">,
+): Promise<EmailOutboxJob | null> {
+  const kv = await getKv();
+  const eventIndexKey: Deno.KvKey = ["email_outbox_events", eventKey];
+  const existing = await kv.get<string>(eventIndexKey, {
+    consistency: "strong",
+  });
+  if (existing.value) return null;
+  const job: EmailOutboxJob = {
+    id: crypto.randomUUID(),
+    createdAt: new Date().toISOString(),
+    eventKey,
+    leaseOwner: null,
+    leaseExpiresAt: null,
+    ...entry,
+  };
+  const commit = await kv.atomic()
+    .check(existing)
+    .set(["email_outbox", job.id], job)
+    .set(eventIndexKey, job.id)
+    .commit();
+  return commit.ok ? job : null;
+}
+
 export async function deleteEmailOutbox(jobId: string): Promise<void> {
   const kv = await getKv();
   await kv.delete(["email_outbox", jobId]);
@@ -69,6 +95,62 @@ export async function listDueEmailOutbox(
   }
 
   return jobs.sort((a, b) => a.nextAttemptAt.localeCompare(b.nextAttemptAt));
+}
+
+export async function claimDueEmailOutbox(
+  limit: number,
+  now = new Date(),
+): Promise<EmailOutboxJob[]> {
+  const kv = await getKv();
+  const claimed: EmailOutboxJob[] = [];
+  const leaseOwner = crypto.randomUUID();
+  const leaseExpiresAt = new Date(now.getTime() + 5 * 60 * 1000).toISOString();
+
+  for await (
+    const entry of kv.list<EmailOutboxJob>({ prefix: ["email_outbox"] })
+  ) {
+    if (claimed.length >= limit) break;
+    const job = entry.value;
+    if (Date.parse(job.nextAttemptAt) > now.getTime()) continue;
+    if (
+      job.leaseExpiresAt && Date.parse(job.leaseExpiresAt) > now.getTime()
+    ) continue;
+    const next = { ...job, leaseOwner, leaseExpiresAt };
+    if ((await kv.atomic().check(entry).set(entry.key, next).commit()).ok) {
+      claimed.push(next);
+    }
+  }
+  return claimed;
+}
+
+export async function deleteClaimedEmailOutbox(
+  job: EmailOutboxJob,
+): Promise<boolean> {
+  const kv = await getKv();
+  const current = await kv.get<EmailOutboxJob>(["email_outbox", job.id], {
+    consistency: "strong",
+  });
+  if (!current.value || current.value.leaseOwner !== job.leaseOwner) {
+    return false;
+  }
+  return (await kv.atomic().check(current).delete(current.key).commit()).ok;
+}
+
+export async function updateClaimedEmailOutbox(
+  job: EmailOutboxJob,
+): Promise<boolean> {
+  const kv = await getKv();
+  const current = await kv.get<EmailOutboxJob>(["email_outbox", job.id], {
+    consistency: "strong",
+  });
+  if (!current.value || current.value.leaseOwner !== job.leaseOwner) {
+    return false;
+  }
+  return (await kv.atomic().check(current).set(current.key, {
+    ...job,
+    leaseOwner: null,
+    leaseExpiresAt: null,
+  }).commit()).ok;
 }
 
 export async function listEmailLogsByRegistration(

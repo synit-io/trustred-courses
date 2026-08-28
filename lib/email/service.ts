@@ -1,20 +1,21 @@
 import { env } from "../env.ts";
 import { listActiveCourses } from "../courses/repository.ts";
 import { logger } from "../observability/logger.ts";
-import type { Course, Registration } from "../types.ts";
+import type { Course, EmailOutboxJob, Registration } from "../types.ts";
 import { listRegistrationsByCourse } from "../registrations/repository.ts";
 import {
   appendEmailLog,
-  deleteEmailOutbox,
+  claimDueEmailOutbox,
+  deleteClaimedEmailOutbox,
   enqueueEmailOutbox,
-  hasCourseReminderBeenSent,
-  listDueEmailOutbox,
+  enqueueEmailOutboxOnce,
   markCourseReminderSent,
-  updateEmailOutbox,
+  updateClaimedEmailOutbox,
 } from "./repository.ts";
 import {
   type CourseBroadcastEvent,
   type CourseChangeDetails,
+  escapeHtml,
   type RegistrationEmailEvent,
   renderCourseBroadcastTemplate,
   renderRegistrationDoubleOptInTemplate,
@@ -49,8 +50,7 @@ async function defaultSendMail(
 ): Promise<SendMailResult> {
   if (!hasSmtpConfig()) {
     logger.error("email.smtp_not_configured", {
-      recipient,
-      subject,
+      recipient: maskEmail(recipient),
     });
     return { ok: false, error: "SMTP nicht konfiguriert" };
   }
@@ -78,15 +78,24 @@ async function defaultSendMail(
     return { ok: true };
   } catch (error) {
     logger.error("email.smtp_send_failed", {
-      recipient,
-      subject,
-      error,
+      recipient: maskEmail(recipient),
+      error: error instanceof Error ? error.name : "unknown",
     });
     return { ok: false, error: (error as Error).message };
   }
 }
 
 let emailSender: EmailSender = defaultSendMail;
+
+function maskEmail(value: string): string {
+  const [local, domain] = value.split("@");
+  if (!local || !domain) return "***";
+  return `${local.slice(0, 2)}***@${domain}`;
+}
+
+export function renderAdminNotificationHtml(adminText: string): string {
+  return `<p>${escapeHtml(adminText).replaceAll("\n", "<br/>")}</p>`;
+}
 
 export function __setEmailSenderForTests(sender: EmailSender | null): void {
   emailSender = sender ?? defaultSendMail;
@@ -157,6 +166,66 @@ function toRegistrationEvent(
     : "pending_review";
 }
 
+export function createRegistrationEventOutboxJob(
+  registration: Registration,
+  course: Course,
+  event: RegistrationEmailEvent,
+  eventKey: string,
+  customMessage?: string,
+): EmailOutboxJob {
+  const template = renderRegistrationTemplate(
+    event,
+    registration,
+    course,
+    customMessage,
+  );
+  return {
+    id: crypto.randomUUID(),
+    registrationId: registration.id,
+    templateKey: event,
+    recipientEmail: registration.email,
+    subject: template.subject,
+    text: template.text,
+    html: template.html,
+    attempt: 0,
+    nextAttemptAt: new Date().toISOString(),
+    createdAt: new Date().toISOString(),
+    lastError: null,
+    eventKey,
+    leaseOwner: null,
+    leaseExpiresAt: null,
+  };
+}
+
+export function createDoubleOptInOutboxJob(
+  registration: Registration,
+  course: Course,
+  confirmationUrl: string,
+): EmailOutboxJob {
+  const template = renderRegistrationDoubleOptInTemplate(
+    registration,
+    course,
+    confirmationUrl,
+  );
+  const now = new Date().toISOString();
+  return {
+    id: crypto.randomUUID(),
+    registrationId: registration.id,
+    templateKey: "double_opt_in_confirmation",
+    recipientEmail: registration.email,
+    subject: template.subject,
+    text: template.text,
+    html: template.html,
+    attempt: 0,
+    nextAttemptAt: now,
+    createdAt: now,
+    lastError: null,
+    eventKey: `registration_doi:${registration.id}`,
+    leaseOwner: null,
+    leaseExpiresAt: null,
+  };
+}
+
 export async function sendRegistrationEventEmails(
   registration: Registration,
   course: Course,
@@ -192,8 +261,8 @@ export async function sendRegistrationEventEmails(
     logger.warn("email.delivery_failed_initial", {
       registrationId: registration.id,
       templateKey: mappedEvent,
-      recipient: registration.email,
-      error: recipientResult.error ?? "unknown",
+      recipient: maskEmail(registration.email),
+      error: "delivery_failed",
     });
     if (EMAIL_OUTBOX_MAX_ATTEMPTS > 1) {
       await queueEmailRetry(
@@ -223,7 +292,7 @@ export async function sendRegistrationEventEmails(
       env.mailAdminNotificationTo,
       adminSubject,
       adminText,
-      `<p>${adminText.replaceAll("\n", "<br/>")}</p>`,
+      renderAdminNotificationHtml(adminText),
     );
 
     await logDelivery(
@@ -240,51 +309,11 @@ export async function sendRegistrationEventEmails(
         env.mailAdminNotificationTo,
         adminSubject,
         adminText,
-        `<p>${adminText.replaceAll("\n", "<br/>")}</p>`,
+        renderAdminNotificationHtml(adminText),
         1,
         adminResult.error ?? "unknown",
       );
     }
-  }
-}
-
-export async function sendRegistrationDoubleOptInEmail(
-  registration: Registration,
-  course: Course,
-  confirmUrl: string,
-): Promise<void> {
-  const template = renderRegistrationDoubleOptInTemplate(
-    registration,
-    course,
-    confirmUrl,
-  );
-
-  const recipientResult = await emailSender(
-    registration.email,
-    template.subject,
-    template.text,
-    template.html,
-  );
-
-  await logDelivery(
-    registration.id,
-    "double_opt_in_confirmation",
-    registration.email,
-    template.subject,
-    recipientResult,
-  );
-
-  if (!recipientResult.ok && EMAIL_OUTBOX_MAX_ATTEMPTS > 1) {
-    await queueEmailRetry(
-      registration.id,
-      "double_opt_in_confirmation",
-      registration.email,
-      template.subject,
-      template.text,
-      template.html,
-      1,
-      recipientResult.error ?? "unknown",
-    );
   }
 }
 
@@ -313,8 +342,8 @@ async function sendPreparedEmail(
     logger.warn("email.delivery_failed_initial", {
       registrationId,
       templateKey,
-      recipient: recipientEmail,
-      error: result.error ?? "unknown",
+      recipient: maskEmail(recipientEmail),
+      error: "delivery_failed",
     });
     if (EMAIL_OUTBOX_MAX_ATTEMPTS > 1) {
       await queueEmailRetry(
@@ -394,33 +423,44 @@ export async function processCourseReminders(
     );
 
     for (const registration of recipients) {
-      const alreadySent = await hasCourseReminderBeenSent(
-        registration.id,
-        course.id,
-        course.reminderDaysBefore!,
-      );
-      if (alreadySent) continue;
-
-      await markCourseReminderSent(
-        registration.id,
-        course.id,
-        course.reminderDaysBefore!,
-      );
       const template = renderCourseBroadcastTemplate(
         "course_reminder",
         registration,
         course,
       );
-      await sendPreparedEmail(
-        registration.id,
+      const eventKey = [
         "course_reminder",
-        registration.email,
-        template,
-      );
-      reminderCount += 1;
+        course.id,
+        course.startsAt,
+        course.reminderDaysBefore,
+        registration.id,
+      ].join(":");
+      const job = await enqueueEmailOutboxOnce(eventKey, {
+        registrationId: registration.id,
+        templateKey: "course_reminder",
+        recipientEmail: registration.email,
+        subject: template.subject,
+        text: template.text,
+        html: template.html,
+        attempt: 0,
+        nextAttemptAt: now.toISOString(),
+        lastError: null,
+        leaseOwner: null,
+        leaseExpiresAt: null,
+      });
+      if (job) {
+        await markCourseReminderSent(
+          registration.id,
+          course.id,
+          course.reminderDaysBefore!,
+        );
+        reminderCount += 1;
+      }
     }
   }
-
+  if (reminderCount > 0) {
+    await processEmailOutboxBatch(reminderCount, now);
+  }
   return reminderCount;
 }
 
@@ -428,7 +468,7 @@ export async function processEmailOutboxBatch(
   limit = 20,
   now = new Date(),
 ): Promise<number> {
-  const dueJobs = await listDueEmailOutbox(now);
+  const dueJobs = await claimDueEmailOutbox(limit, now);
   let processed = 0;
 
   for (const job of dueJobs.slice(0, limit)) {
@@ -441,7 +481,9 @@ export async function processEmailOutboxBatch(
 
     await appendEmailLog({
       registrationId: job.registrationId,
-      templateKey: `${job.templateKey}_retry`,
+      templateKey: job.attempt === 0
+        ? job.templateKey
+        : `${job.templateKey}_retry`,
       recipientEmail: job.recipientEmail,
       subject: job.subject,
       deliveryStatus: result.ok ? "sent" : "failed",
@@ -457,25 +499,25 @@ export async function processEmailOutboxBatch(
         templateKey: job.templateKey,
         attempt: failedAttempt,
       });
-      await deleteEmailOutbox(job.id);
+      await deleteClaimedEmailOutbox(job);
     } else if (failedAttempt >= EMAIL_OUTBOX_MAX_ATTEMPTS) {
       logger.error("email.outbox_permanent_failure", {
         jobId: job.id,
         registrationId: job.registrationId,
         templateKey: job.templateKey,
         attempt: failedAttempt,
-        error: result.error ?? "unknown",
+        error: "delivery_failed",
       });
-      await deleteEmailOutbox(job.id);
+      await deleteClaimedEmailOutbox(job);
     } else {
       logger.warn("email.outbox_retry_scheduled", {
         jobId: job.id,
         registrationId: job.registrationId,
         templateKey: job.templateKey,
         attempt: failedAttempt,
-        error: result.error ?? "unknown",
+        error: "delivery_failed",
       });
-      await updateEmailOutbox({
+      await updateClaimedEmailOutbox({
         ...job,
         attempt: failedAttempt,
         nextAttemptAt: nextRetryAt(failedAttempt),

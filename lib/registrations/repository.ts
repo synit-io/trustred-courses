@@ -1,5 +1,7 @@
 import { getKv } from "../kv/client.ts";
 import type { Registration, RegistrationStatus } from "../types.ts";
+import type { AuditLog, EmailOutboxJob } from "../types.ts";
+import { addAuditLogToAtomic } from "../audit/repository.ts";
 
 export async function createRegistration(
   registration: Registration,
@@ -51,7 +53,9 @@ export async function listRegistrationsByCourse(
   );
 }
 
-export async function listRegistrations(limit = 200): Promise<Registration[]> {
+export async function listRegistrations(
+  limit?: number,
+): Promise<Registration[]> {
   const kv = await getKv();
   const registrations: Registration[] = [];
 
@@ -59,7 +63,7 @@ export async function listRegistrations(limit = 200): Promise<Registration[]> {
     const entry of kv.list<Registration>({ prefix: ["registrations"] })
   ) {
     registrations.push(entry.value);
-    if (registrations.length >= limit) break;
+    if (limit !== undefined && registrations.length >= limit) break;
   }
 
   return registrations.sort((a, b) =>
@@ -77,33 +81,50 @@ export async function getRegistrationById(
   return entry.value;
 }
 
-export async function updateRegistration(
-  previous: Registration,
-  next: Registration,
-): Promise<void> {
+export async function getRegistrationEntryById(
+  registrationId: string,
+): Promise<Deno.KvEntryMaybe<Registration>> {
   const kv = await getKv();
+  return await kv.get<Registration>(["registrations", registrationId], {
+    consistency: "strong",
+  });
+}
 
-  const tx = kv.atomic().set(["registrations", next.id], next);
-
-  tx.set(
-    ["registrations_by_course", next.courseId, next.submittedAt, next.id],
-    next.status,
-  );
-
-  if (previous.status !== next.status) {
-    tx.delete([
-      "registrations_by_status",
-      previous.status,
-      previous.submittedAt,
-      previous.id,
-    ]);
-    tx.set(
-      ["registrations_by_status", next.status, next.submittedAt, next.id],
-      next.courseId,
+export async function updateRegistrationChecked(
+  previous: Deno.KvEntry<Registration>,
+  next: Registration,
+  auditLog?: AuditLog,
+  outboxJob?: EmailOutboxJob,
+): Promise<boolean> {
+  const kv = await getKv();
+  let tx = kv.atomic()
+    .check(previous)
+    .set(["registrations", next.id], next)
+    .set(
+      ["registrations_by_course", next.courseId, next.submittedAt, next.id],
+      next.status,
     );
-  }
 
-  await tx.commit();
+  if (previous.value.status !== next.status) {
+    tx = tx
+      .delete([
+        "registrations_by_status",
+        previous.value.status,
+        previous.value.submittedAt,
+        previous.value.id,
+      ])
+      .set(
+        ["registrations_by_status", next.status, next.submittedAt, next.id],
+        next.courseId,
+      );
+  }
+  if (auditLog) tx = addAuditLogToAtomic(tx, auditLog);
+  if (outboxJob?.eventKey) {
+    tx = tx
+      .set(["email_outbox", outboxJob.id], outboxJob)
+      .set(["email_outbox_events", outboxJob.eventKey], outboxJob.id);
+  }
+  return (await tx.commit()).ok;
 }
 
 export async function countRegistrationsByStatus(

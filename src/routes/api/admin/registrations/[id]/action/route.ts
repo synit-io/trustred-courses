@@ -1,5 +1,4 @@
 import { hasRole } from "@/lib/auth/roles.ts";
-import { appendAuditLog } from "@/lib/audit/repository.ts";
 import {
   applyRegistrationAction,
   type RegistrationAction,
@@ -20,7 +19,7 @@ export const adminRegistrationsActionRoute = new Hono<AppEnv>().post(
     if (typeof action !== "string") return c.text("ungültige Aktion", 400);
 
     try {
-      const result = await applyRegistrationAction({
+      await applyRegistrationAction({
         registrationId: c.req.param("id"),
         action: action as RegistrationAction,
         actorUserId: sessionUser.id,
@@ -30,25 +29,6 @@ export const adminRegistrationsActionRoute = new Hono<AppEnv>().post(
         internalNotes: typeof form.get("internalNotes") === "string"
           ? String(form.get("internalNotes"))
           : undefined,
-      });
-
-      await appendAuditLog({
-        actorUserId: sessionUser.id,
-        entityType: "registration",
-        entityId: result.next.id,
-        action: `registration.${action}`,
-        oldValue: JSON.stringify({
-          status: result.previous.status,
-          waitingListPosition: result.previous.waitingListPosition,
-          adminMessage: result.previous.adminMessage,
-          internalNotes: result.previous.internalNotes,
-        }),
-        newValue: JSON.stringify({
-          status: result.next.status,
-          waitingListPosition: result.next.waitingListPosition,
-          adminMessage: result.next.adminMessage,
-          internalNotes: result.next.internalNotes,
-        }),
       });
 
       return c.redirect(

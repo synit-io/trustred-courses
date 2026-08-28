@@ -19,6 +19,10 @@ export interface PendingPaidRegistration {
   courseId: string;
   registrationInput: PaidRegistrationInput;
   paypalOrderId: string;
+  status: "creating" | "checkout_created" | "captured" | "finalized";
+  registrationId: string;
+  confirmationToken: string;
+  capture?: PayPalCaptureResult;
   feeAmountCents: number;
   feeCurrency: string;
   createdAt: string;
@@ -111,6 +115,7 @@ export async function createPayPalCheckoutOrder(input: {
   title: string;
   returnUrl: string;
   cancelUrl: string;
+  requestId: string;
 }): Promise<PayPalCheckoutOrderResult> {
   const accessToken = await paypalAccessToken();
   const response = await fetch(`${paypalApiBaseUrl()}/v2/checkout/orders`, {
@@ -118,6 +123,7 @@ export async function createPayPalCheckoutOrder(input: {
     headers: {
       "Content-Type": "application/json",
       Authorization: `Bearer ${accessToken}`,
+      "PayPal-Request-Id": input.requestId,
       Prefer: "return=representation",
     },
     body: JSON.stringify({
@@ -166,6 +172,7 @@ export async function createPayPalCheckoutOrder(input: {
 
 export async function capturePayPalOrder(
   orderId: string,
+  requestId: string,
 ): Promise<PayPalCaptureResult> {
   const accessToken = await paypalAccessToken();
   const response = await fetch(
@@ -177,6 +184,7 @@ export async function capturePayPalOrder(
       headers: {
         "Content-Type": "application/json",
         Authorization: `Bearer ${accessToken}`,
+        "PayPal-Request-Id": requestId,
         Prefer: "return=representation",
       },
     },
@@ -220,15 +228,62 @@ export async function capturePayPalOrder(
   };
 }
 
-const PENDING_REGISTRATION_TTL_MS = 60 * 60 * 1000;
+const PENDING_REGISTRATION_TTL_MS = 24 * 60 * 60 * 1000;
 
 export async function savePendingPaidRegistration(
   pending: PendingPaidRegistration,
 ): Promise<void> {
   const kv = await getKv();
-  await kv.set(["pending_paid_registrations", pending.id], pending, {
-    expireIn: PENDING_REGISTRATION_TTL_MS,
-  });
+  await kv.atomic()
+    .set(["pending_paid_registrations", pending.id], pending, {
+      expireIn: PENDING_REGISTRATION_TTL_MS,
+    })
+    .set(
+      ["pending_paid_registrations_by_course", pending.courseId, pending.id],
+      true,
+      {
+        expireIn: PENDING_REGISTRATION_TTL_MS,
+      },
+    )
+    .commit();
+}
+
+export async function updatePendingPaidRegistration(
+  pending: PendingPaidRegistration,
+): Promise<boolean> {
+  const kv = await getKv();
+  const current = await kv.get<PendingPaidRegistration>(
+    ["pending_paid_registrations", pending.id],
+    { consistency: "strong" },
+  );
+  if (!current.value) return false;
+  return (await kv.atomic()
+    .check(current)
+    .set(["pending_paid_registrations", pending.id], pending, {
+      expireIn: PENDING_REGISTRATION_TTL_MS,
+    })
+    .set(
+      ["pending_paid_registrations_by_course", pending.courseId, pending.id],
+      true,
+      {
+        expireIn: PENDING_REGISTRATION_TTL_MS,
+      },
+    )
+    .commit()).ok;
+}
+
+export async function hasPendingPaidRegistrationsForCourse(
+  courseId: string,
+): Promise<boolean> {
+  const kv = await getKv();
+  for await (
+    const entry of kv.list<boolean>({
+      prefix: ["pending_paid_registrations_by_course", courseId],
+    }, { limit: 1 })
+  ) {
+    if (entry.value) return true;
+  }
+  return false;
 }
 
 export async function getPendingPaidRegistration(
@@ -244,5 +299,14 @@ export async function getPendingPaidRegistration(
 
 export async function deletePendingPaidRegistration(id: string): Promise<void> {
   const kv = await getKv();
-  await kv.delete(["pending_paid_registrations", id]);
+  const current = await getPendingPaidRegistration(id);
+  let tx = kv.atomic().delete(["pending_paid_registrations", id]);
+  if (current) {
+    tx = tx.delete([
+      "pending_paid_registrations_by_course",
+      current.courseId,
+      current.id,
+    ]);
+  }
+  await tx.commit();
 }

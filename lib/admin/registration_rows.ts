@@ -41,7 +41,7 @@ export async function queryRegistrationRows(
   filters: RegistrationDashboardFilters,
 ): Promise<RegistrationRowsResult> {
   const [registrations, courses] = await Promise.all([
-    listRegistrations(500),
+    listRegistrations(),
     listCourses(),
   ]);
 

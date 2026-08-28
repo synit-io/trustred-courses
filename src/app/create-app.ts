@@ -23,6 +23,7 @@ try {
     email: env.initialAdminEmail.trim().toLowerCase(),
     error,
   });
+  throw error;
 }
 
 registerCronJobs();

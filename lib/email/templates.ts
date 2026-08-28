@@ -57,7 +57,7 @@ function courseFacts(course: Course): Array<{ label: string; value: string }> {
   ];
 }
 
-function escapeHtml(value: string): string {
+export function escapeHtml(value: string): string {
   return value
     .replaceAll("&", "&amp;")
     .replaceAll("<", "&lt;")

@@ -8,18 +8,21 @@ export interface AuditLogPage {
   pageSize: number;
 }
 
-export async function appendAuditLog(
+export function createAuditLog(
   entry: Omit<AuditLog, "id" | "createdAt">,
-): Promise<AuditLog> {
-  const kv = await getKv();
-  const now = new Date().toISOString();
-  const log: AuditLog = {
+): AuditLog {
+  return {
     id: crypto.randomUUID(),
-    createdAt: now,
+    createdAt: new Date().toISOString(),
     ...entry,
   };
+}
 
-  await kv.atomic()
+export function addAuditLogToAtomic(
+  tx: Deno.AtomicOperation,
+  log: AuditLog,
+): Deno.AtomicOperation {
+  return tx
     .set(["audit_logs", log.id], log)
     .set(
       [
@@ -30,8 +33,16 @@ export async function appendAuditLog(
         log.id,
       ],
       log.action,
-    )
-    .commit();
+    );
+}
+
+export async function appendAuditLog(
+  entry: Omit<AuditLog, "id" | "createdAt">,
+): Promise<AuditLog> {
+  const kv = await getKv();
+  const log = createAuditLog(entry);
+
+  await addAuditLogToAtomic(kv.atomic(), log).commit();
 
   return log;
 }
