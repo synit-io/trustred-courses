@@ -1,7 +1,7 @@
 {
   "nodeModulesDir": "auto",
   "tasks": {
-    "css": "deno run -A npm:@tailwindcss/cli -i ./assets/styles.css -o ./static/app.css",
+    "css": "deno run -A npm:@tailwindcss/cli@4.3.3 -i ./assets/styles.css -o ./static/app.css",
     "check": "deno fmt --check . && deno lint . && deno check entrypoints/local.ts",
     "dev": "deno task css && deno run -A --watch --unstable-kv --unstable-cron entrypoints/local.ts",
     "dev:clean": "rm -rf node_modules static/app.css && deno cache --reload entrypoints/local.ts && deno task dev",

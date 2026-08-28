@@ -34,6 +34,12 @@ jobs:
       - name: Run checks
         run: deno task check
 
+      - name: Verify generated CSS
+        run: deno task css && git diff --exit-code -- static/app.css
+
+      - name: Run unit tests
+        run: deno task test
+
   e2e:
     name: End-to-End Tests
     runs-on: ubuntu-latest

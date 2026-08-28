@@ -8,7 +8,7 @@ services:
   trustred-courses:
     build:
       context: ..
-      dockerfile: e2e/Dockerfile
+      dockerfile: Dockerfile
     depends_on:
       - mailpit
     environment:

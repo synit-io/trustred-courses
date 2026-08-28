@@ -31,8 +31,11 @@ jobs:
       - name: Update Deno dependencies
         run: deno outdated --update --latest
 
+      - name: Regenerate CSS
+        run: deno task css
+
       - name: Validate updated dependencies
-        run: deno task check
+        run: deno task check && deno task test
 
       - name: Create pull request
         uses: peter-evans/create-pull-request@v8
@@ -45,7 +48,8 @@ jobs:
             What this PR does:
             - runs `deno outdated --update --latest`
             - updates `deno.lock` when needed
-            - runs `deno task check` before opening the PR
+            - regenerates `static/app.css`
+            - runs `deno task check` and `deno task test` before opening the PR
           branch: chore/deno-dependencies
           delete-branch: true
           labels: dependencies
