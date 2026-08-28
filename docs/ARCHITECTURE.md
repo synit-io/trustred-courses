@@ -117,6 +117,9 @@ scans for ordinary page reads.
 Course and registration writes rebuild affected snapshots incrementally. A full
 rebuild function remains available for repair and tests.
 
+Incremental home-snapshot writes use Deno KV compare-and-set retries so
+concurrent course updates cannot overwrite each other.
+
 ## Authentication and authorization
 
 Administrators authenticate through email magic links. The application uses
@@ -130,6 +133,9 @@ Security controls include:
 - configurable idle and absolute session lifetimes
 - session invalidation through user `authVersion`
 - failed-login rate limiting
+- successful magic-link and public-registration rate limiting
+- exact-origin validation for authenticated state-changing requests
+- request-size and public registration field limits
 - secure cookie configuration
 - role hierarchy: `viewer`, `editor`, `approver`, `admin`, `super_admin`
 
@@ -143,10 +149,19 @@ Paid courses use server-side PayPal order creation and capture. Pending payment
 state is stored in KV, and a registration is finalized only after successful
 capture. Free courses do not require PayPal configuration.
 
+Payment creation, capture, and registration finalization use persisted states
+and stable PayPal request IDs. Replayed callbacks resume finalization instead of
+capturing again. Registration state transitions use per-course distributed locks
+plus version checks; state and audit records commit together.
+
 ## Email and scheduled jobs
 
 Email delivery uses `nodemailer`. Failed deliveries can enter a KV-backed outbox
 for retry.
+
+Outbox workers claim jobs with expiring leases. Registration-action messages and
+double-opt-in messages are written durably with their owning state change;
+deterministic event keys prevent duplicate reminder jobs.
 
 [`lib/background/cron.ts`](../lib/background/cron.ts) registers:
 

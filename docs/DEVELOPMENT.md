@@ -49,6 +49,7 @@ MAGIC_LINK_TTL_MINUTES
 SESSION_*
 REGISTRATION_*
 EMBED_ALLOWED_ORIGINS
+TRUSTED_CLIENT_IP_HEADER
 ```
 
 See [`.env.example`](../.env.example) for every setting, default, and allowed
@@ -140,6 +141,8 @@ Run repository checks and tests:
 deno task check
 deno task test
 ```
+
+CI runs both commands before end-to-end tests and image publication.
 
 Run the end-to-end flow separately:
 

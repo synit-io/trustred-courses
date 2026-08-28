@@ -12,7 +12,7 @@ After checks and end-to-end tests pass on `main`, GitHub Actions builds and
 pushes `synitio/trustred-courses:latest` to Docker Hub. Repository configuration
 requires:
 
-- Actions variable `DOCKERHUB_USERNAME`: Docker Hub account with push access to
+- Actions secret `DOCKERHUB_USERNAME`: Docker Hub account with push access to
   the `synitio` namespace
 - Actions secret `DOCKERHUB_TOKEN`: Docker Hub personal access token with read
   and write permissions
@@ -46,6 +46,7 @@ KV_PATH=".data/trustred-courses.kv"
 
 AUTH_COOKIE_SECURE="true"
 AUTH_DEV_EXPOSE_MAGIC_LINK="false"
+TRUSTED_CLIENT_IP_HEADER="x-real-ip"
 
 SMTP_HOST="smtp.example.org"
 SMTP_PORT="587"
@@ -109,12 +110,14 @@ Open `https://courses.example.org/admin/login` and request a magic link using
 
 Terminate TLS in a reverse proxy and forward requests to
 `http://127.0.0.1:8000`. Preserve the original host, protocol, and client IP
-headers. Keep these values in production:
+headers. Configure the proxy to overwrite `X-Real-IP`; never forward a
+client-supplied value unchanged. Keep these values in production:
 
 ```dotenv
 APP_BASE_URL="https://courses.example.org"
 AUTH_COOKIE_SECURE="true"
 AUTH_DEV_EXPOSE_MAGIC_LINK="false"
+TRUSTED_CLIENT_IP_HEADER="x-real-ip"
 ```
 
 Only expose ports `80` and `443` publicly. Port `8000` stays bound to localhost.
