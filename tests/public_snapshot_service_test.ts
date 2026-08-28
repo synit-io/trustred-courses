@@ -13,7 +13,7 @@ import {
 } from "../lib/registrations/repository.ts";
 import { applyRegistrationAction } from "../lib/registrations/service.ts";
 import type { Course, Registration } from "../lib/types.ts";
-import { setupKvTest } from "./test_utils.ts";
+import { futureIso, setupKvTest } from "./test_utils.ts";
 
 function courseFixture(
   id: string,
@@ -25,8 +25,8 @@ function courseFixture(
     title: `Course ${id}`,
     description: "Public snapshot test course",
     location: "Berlin",
-    startsAt: "2026-06-10T08:00:00.000Z",
-    endsAt: "2026-06-10T16:00:00.000Z",
+    startsAt: futureIso(60, 8),
+    endsAt: futureIso(60, 16),
     registrationOpensAt: "2020-01-01T00:00:00.000Z",
     registrationClosesAt: "2099-01-01T00:00:00.000Z",
     capacity,

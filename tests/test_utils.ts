@@ -1,5 +1,12 @@
 import { __setKvFactoryForTests } from "../lib/kv/client.ts";
 
+export function futureIso(daysFromNow: number, hourUtc: number): string {
+  const date = new Date();
+  date.setUTCDate(date.getUTCDate() + daysFromNow);
+  date.setUTCHours(hourUtc, 0, 0, 0);
+  return date.toISOString();
+}
+
 export interface KvTestContext {
   kv: Deno.Kv;
   cleanup: () => Promise<void>;

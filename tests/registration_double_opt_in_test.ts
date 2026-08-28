@@ -11,7 +11,7 @@ import {
   submitRegistrationWithDoubleOptIn,
 } from "../lib/registrations/service.ts";
 import type { Course } from "../lib/types.ts";
-import { setupKvTest } from "./test_utils.ts";
+import { futureIso, setupKvTest } from "./test_utils.ts";
 
 function courseFixture(): Course {
   return {
@@ -19,8 +19,8 @@ function courseFixture(): Course {
     title: "Erste Hilfe DOI",
     description: "Ganztagskurs",
     location: "Mainz",
-    startsAt: "2026-06-02T08:00:00.000Z",
-    endsAt: "2026-06-02T17:00:00.000Z",
+    startsAt: futureIso(60, 8),
+    endsAt: futureIso(60, 17),
     registrationOpensAt: "2020-01-01T00:00:00.000Z",
     registrationClosesAt: "2099-01-01T00:00:00.000Z",
     capacity: 10,

@@ -1,8 +1,5 @@
 import { assert, assertEquals, assertRejects } from "@std/assert";
-import {
-  appendAuditLog,
-  listAuditLogsByEntityPaginated,
-} from "../lib/audit/repository.ts";
+import { listAuditLogsByEntityPaginated } from "../lib/audit/repository.ts";
 import { upsertCourse } from "../lib/courses/repository.ts";
 import {
   listEmailLogsByRegistrationPaginated,
@@ -14,7 +11,7 @@ import {
   submitRegistration,
 } from "../lib/registrations/service.ts";
 import type { Course } from "../lib/types.ts";
-import { setupKvTest } from "./test_utils.ts";
+import { futureIso, setupKvTest } from "./test_utils.ts";
 
 function courseFixture(): Course {
   return {
@@ -22,8 +19,8 @@ function courseFixture(): Course {
     title: "Erste Hilfe Intensiv",
     description: "Ganztagskurs",
     location: "Hamburg",
-    startsAt: "2026-05-02T08:00:00.000Z",
-    endsAt: "2026-05-02T17:00:00.000Z",
+    startsAt: futureIso(60, 8),
+    endsAt: futureIso(60, 17),
     registrationOpensAt: "2020-01-01T00:00:00.000Z",
     registrationClosesAt: "2099-01-01T00:00:00.000Z",
     capacity: 10,
@@ -78,18 +75,10 @@ async function runAdminAction(
   registrationId: string,
   action: "approve" | "reject",
 ): Promise<void> {
-  const result = await applyRegistrationAction({
+  await applyRegistrationAction({
     registrationId,
     action,
     actorUserId: "admin-1",
-  });
-  await appendAuditLog({
-    actorUserId: "admin-1",
-    entityType: "registration",
-    entityId: result.next.id,
-    action: `registration.${action}`,
-    oldValue: JSON.stringify({ status: result.previous.status }),
-    newValue: JSON.stringify({ status: result.next.status }),
   });
 }
 
