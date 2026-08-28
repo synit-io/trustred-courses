@@ -4,6 +4,16 @@ import type { RegistrationStatus } from "@/lib/types.ts";
 import type { AppEnv } from "@/src/app/context.ts";
 import { Hono } from "hono";
 
+export function csvEscape(value: string | number | null): string {
+  if (value === null) return "";
+  const raw = String(value);
+  const text = /^[=+\-@]/.test(raw.trimStart()) ? `'${raw}` : raw;
+  if (text.includes(",") || text.includes("\n") || text.includes('"')) {
+    return `"${text.replaceAll('"', '""')}"`;
+  }
+  return text;
+}
+
 export const adminRegistrationsExportRoute = new Hono<AppEnv>().get(
   "/registrations.csv",
   async (c) => {
@@ -26,15 +36,6 @@ export const adminRegistrationsExportRoute = new Hono<AppEnv>().get(
       }, 0);
       courseRevenueByCourseId.set(courseId, totalRevenue);
     }
-
-    const csvEscape = (value: string | number | null): string => {
-      if (value === null) return "";
-      const text = String(value);
-      if (text.includes(",") || text.includes("\n") || text.includes('"')) {
-        return `"${text.replaceAll('"', '""')}"`;
-      }
-      return text;
-    };
 
     const header = [
       "id",

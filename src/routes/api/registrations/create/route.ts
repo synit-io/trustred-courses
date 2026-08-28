@@ -6,9 +6,12 @@ import {
 } from "@/lib/observability/logger.ts";
 import {
   createPayPalCheckoutOrder,
+  deletePendingPaidRegistration,
   savePendingPaidRegistration,
+  updatePendingPaidRegistration,
 } from "@/lib/payments/paypal.ts";
 import { enforcePayPalRateLimit } from "@/lib/payments/rate_limit.ts";
+import { enforceRateLimit } from "@/lib/security/rate_limit.ts";
 import {
   ensureRegistrationCanBeSubmitted,
   type RegistrationInput,
@@ -17,8 +20,36 @@ import {
 import type { AppEnv } from "@/src/app/context.ts";
 import { extractRequestIp, maskEmail } from "@/src/routes/shared/helpers.ts";
 import { Hono } from "hono";
+import { bodyLimit } from "hono/body-limit";
 
-export const registrationCreateRoute = new Hono<AppEnv>().post(
+const MAX_REGISTRATION_BODY_BYTES = 64 * 1024;
+const FIELD_LIMITS: Record<string, number> = {
+  courseId: 100,
+  firstName: 100,
+  lastName: 100,
+  street: 200,
+  houseNumber: 30,
+  postalCode: 20,
+  city: 100,
+  email: 254,
+  phone: 50,
+};
+
+function isValidEmail(value: string): boolean {
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value);
+}
+
+export const registrationCreateRoute = new Hono<AppEnv>();
+
+registrationCreateRoute.use(
+  "/",
+  bodyLimit({
+    maxSize: MAX_REGISTRATION_BODY_BYTES,
+    onError: (c) => c.text("Anfrage ist zu groß.", 413),
+  }),
+);
+
+registrationCreateRoute.post(
   "/",
   async (c) => {
     const trace = extractRequestTraceContext(c.req.raw.headers);
@@ -28,11 +59,19 @@ export const registrationCreateRoute = new Hono<AppEnv>().post(
       if (typeof value !== "string" || value.trim() === "") {
         throw new Error(`Feld fehlt: ${key}`);
       }
-      return value;
+      const trimmed = value.trim();
+      if (trimmed.length > (FIELD_LIMITS[key] ?? 500)) {
+        throw new Error(`Feld ist zu lang: ${key}`);
+      }
+      return trimmed;
     };
     const readOptional = (key: string): string => {
       const value = form.get(key);
-      return typeof value === "string" ? value : "";
+      const trimmed = typeof value === "string" ? value.trim() : "";
+      if (trimmed.length > (FIELD_LIMITS[key] ?? 500)) {
+        throw new Error(`Feld ist zu lang: ${key}`);
+      }
+      return trimmed;
     };
 
     let courseId = "";
@@ -51,6 +90,36 @@ export const registrationCreateRoute = new Hono<AppEnv>().post(
         phone: readOptional("phone"),
         consentAccepted: form.get("consentAccepted") === "on",
       };
+      if (!isValidEmail(registrationInput.email)) {
+        throw new Error("E-Mail-Adresse ist ungültig.");
+      }
+
+      const requestIp = extractRequestIp(c.req.raw.headers);
+      const emailLimit = await enforceRateLimit(
+        "registration:email",
+        `${courseId}:${registrationInput.email.toLowerCase()}`,
+        5,
+        60 * 60 * 1000,
+      );
+      const ipLimit = requestIp
+        ? await enforceRateLimit(
+          "registration:ip",
+          requestIp,
+          20,
+          10 * 60 * 1000,
+        )
+        : { allowed: true, retryAfterSeconds: 0 };
+      if (!emailLimit.allowed || !ipLimit.allowed) {
+        c.header(
+          "Retry-After",
+          String(
+            Math.max(emailLimit.retryAfterSeconds, ipLimit.retryAfterSeconds),
+          ),
+        );
+        throw new Error(
+          "Zu viele Anmeldeversuche. Bitte versuche es später erneut.",
+        );
+      }
 
       logger.info("registration.create.requested", {
         ...trace,
@@ -90,7 +159,7 @@ export const registrationCreateRoute = new Hono<AppEnv>().post(
       }
       const rateLimit = await enforcePayPalRateLimit(
         "create",
-        extractRequestIp(c.req.raw.headers),
+        requestIp,
       );
       if (!rateLimit.allowed) {
         c.header("Retry-After", String(rateLimit.retryAfterSeconds));
@@ -100,6 +169,8 @@ export const registrationCreateRoute = new Hono<AppEnv>().post(
       }
 
       const pendingId = crypto.randomUUID();
+      const registrationId = crypto.randomUUID();
+      const confirmationToken = `${crypto.randomUUID()}${crypto.randomUUID()}`;
       const returnUrl =
         `${env.appBaseUrl}/api/registrations/paypal/return?state=${
           encodeURIComponent(pendingId)
@@ -109,26 +180,45 @@ export const registrationCreateRoute = new Hono<AppEnv>().post(
           encodeURIComponent(pendingId)
         }`;
 
-      const order = await createPayPalCheckoutOrder({
-        orderReference: pendingId,
-        amountCents: course.feeAmountCents,
-        currency: course.feeCurrency,
-        title: `Kursgebühr: ${course.title}`,
-        returnUrl,
-        cancelUrl,
-      });
-
       const createdAt = new Date().toISOString();
-      await savePendingPaidRegistration({
+      const pending = {
         id: pendingId,
         courseId,
         registrationInput,
-        paypalOrderId: order.orderId,
+        paypalOrderId: "",
+        status: "creating" as const,
+        registrationId,
+        confirmationToken,
         feeAmountCents: course.feeAmountCents,
         feeCurrency: course.feeCurrency,
         createdAt,
         expiresAt: new Date(Date.now() + 60 * 60 * 1000).toISOString(),
-      });
+      };
+      await savePendingPaidRegistration(pending);
+      let order;
+      try {
+        order = await createPayPalCheckoutOrder({
+          orderReference: pendingId,
+          amountCents: course.feeAmountCents,
+          currency: course.feeCurrency,
+          title: `Kursgebühr: ${course.title}`,
+          returnUrl,
+          cancelUrl,
+          requestId: `create-${pendingId}`,
+        });
+        if (
+          !await updatePendingPaidRegistration({
+            ...pending,
+            paypalOrderId: order.orderId,
+            status: "checkout_created",
+          })
+        ) {
+          throw new Error("Zahlungssitzung konnte nicht gespeichert werden.");
+        }
+      } catch (error) {
+        await deletePendingPaidRegistration(pendingId);
+        throw error;
+      }
 
       logger.info("registration.create.paypal_redirect", {
         ...trace,

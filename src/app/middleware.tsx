@@ -54,6 +54,26 @@ export function registerGlobalMiddleware(app: Hono<AppEnv>) {
   });
 
   app.use("*", async (c, next) => {
+    const method = c.req.method.toUpperCase();
+    const protectedMutation = !["GET", "HEAD", "OPTIONS"].includes(method) &&
+      (c.req.path.startsWith("/api/admin/") ||
+        c.req.path === "/api/auth/logout");
+    if (!protectedMutation) return await next();
+
+    const origin = c.req.raw.headers.get("origin");
+    let expectedOrigin: string;
+    try {
+      expectedOrigin = new URL(env.appBaseUrl).origin;
+    } catch {
+      return c.text("Server configuration error", 500);
+    }
+    if (!origin || origin !== expectedOrigin) {
+      return c.text("Invalid request origin", 403);
+    }
+    await next();
+  });
+
+  app.use("*", async (c, next) => {
     await next();
     c.header("X-Content-Type-Options", "nosniff");
     c.header("Referrer-Policy", "strict-origin-when-cross-origin");

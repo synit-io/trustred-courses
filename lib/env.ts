@@ -34,6 +34,7 @@ export interface EnvConfig {
   appBaseUrl: string;
   authCookieName: string;
   authMagicLinkBindingCookieName: string;
+  trustedClientIpHeader: string;
   authCookieSecure: boolean;
   authRateLimitMaxAttempts: number;
   authRateLimitWindowMinutes: number;
@@ -73,6 +74,8 @@ export const env: EnvConfig = {
   authCookieName: Deno.env.get("AUTH_COOKIE_NAME") ?? "session",
   authMagicLinkBindingCookieName:
     Deno.env.get("AUTH_MAGIC_LINK_BINDING_COOKIE_NAME") ?? "ml_bind",
+  trustedClientIpHeader: (Deno.env.get("TRUSTED_CLIENT_IP_HEADER") ?? "")
+    .trim().toLowerCase(),
   authCookieSecure: Deno.env.get("AUTH_COOKIE_SECURE") === "true",
   authRateLimitMaxAttempts: optionalNumber("AUTH_RATE_LIMIT_MAX_ATTEMPTS", 5),
   authRateLimitWindowMinutes: optionalNumber(

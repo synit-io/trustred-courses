@@ -78,7 +78,9 @@ export const adminUsersPage = new Hono<AppEnv>().get("/users", async (c) => {
               <option value="editor">Bearbeiter</option>
               <option value="approver">Genehmiger</option>
               <option value="admin">Administrator</option>
-              <option value="super_admin">Super Administrator</option>
+              {sessionUser?.role === "super_admin"
+                ? <option value="super_admin">Super Administrator</option>
+                : null}
             </select>
           </label>
           <button
@@ -98,6 +100,8 @@ export const adminUsersPage = new Hono<AppEnv>().get("/users", async (c) => {
               user.emailNormalized === protectedEmail;
             const canDelete = Boolean(sessionUser) &&
               (user.role === "admin" || user.role === "super_admin") &&
+              (user.role !== "super_admin" ||
+                sessionUser?.role === "super_admin") &&
               !isProtectedInitialAdmin &&
               user.id !== sessionUser?.id;
 

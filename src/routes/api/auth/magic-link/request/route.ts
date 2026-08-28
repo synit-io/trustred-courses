@@ -7,9 +7,19 @@ import {
 } from "@/lib/observability/logger.ts";
 import type { AppEnv } from "@/src/app/context.ts";
 import { extractRequestIp, maskEmail } from "@/src/routes/shared/helpers.ts";
+import { enforceRateLimit } from "@/lib/security/rate_limit.ts";
 import { Hono } from "hono";
+import { bodyLimit } from "hono/body-limit";
 
-export const magicLinkRequestRoute = new Hono<AppEnv>().post("/", async (c) => {
+export const magicLinkRequestRoute = new Hono<AppEnv>();
+magicLinkRequestRoute.use(
+  "/",
+  bodyLimit({
+    maxSize: 16 * 1024,
+    onError: (c) => c.redirect("/admin/login?sent=1", 303),
+  }),
+);
+magicLinkRequestRoute.post("/", async (c) => {
   const trace = extractRequestTraceContext(c.req.raw.headers);
   const form = await c.req.formData();
   const email = form.get("email");
@@ -20,8 +30,33 @@ export const magicLinkRequestRoute = new Hono<AppEnv>().post("/", async (c) => {
     "Set-Cookie",
     buildMagicLinkBindingSetCookie(bindingSecret, maxAgeSeconds),
   );
-  if (typeof email === "string" && email.trim() !== "") {
+  if (
+    typeof email === "string" && email.trim() !== "" &&
+    email.trim().length <= 254
+  ) {
     const normalizedEmail = email.trim().toLowerCase();
+    const requestIp = extractRequestIp(c.req.raw.headers);
+    const emailLimit = await enforceRateLimit(
+      "magic_link:email",
+      normalizedEmail,
+      3,
+      15 * 60 * 1000,
+    );
+    const ipLimit = requestIp
+      ? await enforceRateLimit(
+        "magic_link:ip",
+        requestIp,
+        10,
+        15 * 60 * 1000,
+      )
+      : { allowed: true, retryAfterSeconds: 0 };
+    if (!emailLimit.allowed || !ipLimit.allowed) {
+      logger.warn("auth.magic_link.rate_limited", {
+        ...trace,
+        email: maskEmail(normalizedEmail),
+      });
+      return c.redirect("/admin/login?sent=1", 303);
+    }
     logger.info("auth.magic_link.requested", {
       ...trace,
       email: maskEmail(normalizedEmail),
@@ -30,7 +65,7 @@ export const magicLinkRequestRoute = new Hono<AppEnv>().post("/", async (c) => {
       email,
       typeof redirectTo === "string" ? redirectTo : undefined,
       {
-        requestIp: extractRequestIp(c.req.raw.headers),
+        requestIp,
         userAgent: c.req.raw.headers.get("user-agent"),
         bindingSecret,
       },

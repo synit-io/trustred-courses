@@ -6,6 +6,7 @@ import {
 } from "@/lib/registrations/service.ts";
 import type { Course } from "@/lib/types.ts";
 import type { RegistrationEmailEvent } from "@/lib/email/templates.ts";
+import { env } from "@/lib/env.ts";
 
 const sensitiveQueryKeys = new Set([
   "token",
@@ -86,21 +87,12 @@ export function redactQueryForLogs(url: URL): string {
 }
 
 export function extractRequestIp(headers: Headers): string | null {
-  const forwardedFor = headers.get("x-forwarded-for");
-  if (forwardedFor) {
-    const first = forwardedFor.split(",")[0]?.trim();
-    if (first) return first;
-  }
-  const candidates = [
-    headers.get("cf-connecting-ip"),
-    headers.get("x-real-ip"),
-    headers.get("fly-client-ip"),
-    headers.get("x-client-ip"),
-  ];
-  for (const candidate of candidates) {
-    if (candidate && candidate.trim()) return candidate.trim();
-  }
-  return null;
+  const headerName = env.trustedClientIpHeader;
+  if (!headerName) return null;
+  const value = headers.get(headerName);
+  if (!value) return null;
+  const first = value.split(",")[0]?.trim();
+  return first || null;
 }
 
 export function capacityView(total: number, approved: number): {

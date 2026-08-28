@@ -34,6 +34,13 @@ export const adminUsersDeleteRoute = new Hono<AppEnv>().post(
       return c.redirect("/admin/users?error=cannot_delete_self", 303);
     }
 
+    if (
+      targetUser.role === "super_admin" &&
+      sessionUser.role !== "super_admin"
+    ) {
+      return c.text("Forbidden", 403);
+    }
+
     if (targetUser.role !== "admin" && targetUser.role !== "super_admin") {
       return c.redirect("/admin/users?error=target_not_admin", 303);
     }
