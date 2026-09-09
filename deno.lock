@@ -1,18 +1,18 @@
 {
   "version": "5",
   "specifiers": {
-    "jsr:@hono/hono@^4.13.5": "4.13.5",
+    "jsr:@hono/hono@^4.13.7": "4.13.7",
     "jsr:@std/assert@^1.0.19": "1.0.19",
     "jsr:@std/dotenv@0.225.5": "0.225.5",
     "jsr:@std/internal@^1.0.12": "1.0.14",
     "jsr:@synitio/kv-magic-link-auth@~0.2.1": "0.2.1",
     "npm:@tailwindcss/cli@4.3.3": "4.3.3",
-    "npm:nodemailer@9.0.6": "9.0.6",
+    "npm:nodemailer@10.0.0": "10.0.0",
     "npm:tailwindcss@4.3.3": "4.3.3"
   },
   "jsr": {
-    "@hono/hono@4.13.5": {
-      "integrity": "b5b10f340820d14d69add622452e88722d7e99e05e30cdeafcb90133fc752126"
+    "@hono/hono@4.13.7": {
+      "integrity": "90f83307462b2dd47c9a8028cf5e4827abedc74a53fd291a49130f1579fdcd79"
     },
     "@std/assert@1.0.19": {
       "integrity": "eaada96ee120cb980bc47e040f82814d786fe8162ecc53c91d8df60b8755991e",
@@ -387,8 +387,8 @@
     "node-addon-api@7.1.1": {
       "integrity": "sha512-5m3bsyrjFWE1xf7nz7YXdN4udnVtXK6/Yfgn5qnahL6bCkf2yKt4k3nuTKAtT4r3IG8JNR2ncsIMdZuAzJjHQQ=="
     },
-    "nodemailer@9.0.6": {
-      "integrity": "sha512-IQUGFdhdGwI9+AWX+FpUt4DLmvFaOjTMEoneTIWX/RXxuy1TdenPwWrvFMSfLkPKl+HQEXWuSAxEMMbPYXtBmg=="
+    "nodemailer@10.0.0": {
+      "integrity": "sha512-wdv+hXBg0iIPIOf108FaZyTxqjQpCvQeAJt9pHHTooPy/y3vQtI9eiImM9AIVKR3e/0FeMA1oueNfBjFJcaK+Q=="
     },
     "picocolors@1.1.1": {
       "integrity": "sha512-xceH2snhtb5M9liqDsmEw56le376mTZkEX/jEb/RxNFyegNul7eNslCXP9FDj/Lcu0X8KEyMceP2ntpaHrDEVA=="
@@ -414,10 +414,10 @@
   },
   "workspace": {
     "dependencies": [
-      "jsr:@hono/hono@^4.13.5",
+      "jsr:@hono/hono@^4.13.7",
       "jsr:@std/assert@^1.0.19",
       "jsr:@synitio/kv-magic-link-auth@~0.2.1",
-      "npm:nodemailer@9.0.6",
+      "npm:nodemailer@10.0.0",
       "npm:tailwindcss@4.3.3"
     ]
   }
