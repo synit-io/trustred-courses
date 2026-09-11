@@ -43,7 +43,7 @@ export const adminDashboardPage = new Hono<AppEnv>().get(
           <span class="section-kicker">Kursverwaltung</span>
           <div class="mt-3 grid gap-4 lg:grid-cols-[1.2fr_0.8fr]">
             <div>
-              <h1 class="text-4xl font-bold">Administration</h1>
+              <h1 class="text-4xl">Administration</h1>
               <p class="text-body mt-3 max-w-3xl text-sm sm:text-base">
                 Kurse, Anmeldungen und Wartelisten verwalten.
               </p>
@@ -72,7 +72,7 @@ export const adminDashboardPage = new Hono<AppEnv>().get(
         <section class="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
           <article class="fact-tile">
             <p class="text-label">Gesamt</p>
-            <p class="metric-value mt-1 text-3xl font-display">
+            <p class="stat-number mt-1">
               {stats.total}
             </p>
           </article>
@@ -80,7 +80,7 @@ export const adminDashboardPage = new Hono<AppEnv>().get(
             <p class="text-label">
               Ausstehend
             </p>
-            <p class="metric-value-warning mt-1 text-3xl font-display">
+            <p class="stat-number stat-number-warning mt-1">
               {stats.pending}
             </p>
           </article>
@@ -88,7 +88,7 @@ export const adminDashboardPage = new Hono<AppEnv>().get(
             <p class="text-label">
               Warteliste
             </p>
-            <p class="metric-value-warning mt-1 text-3xl font-display">
+            <p class="stat-number stat-number-warning mt-1">
               {stats.waitlisted}
             </p>
           </article>
@@ -96,7 +96,7 @@ export const adminDashboardPage = new Hono<AppEnv>().get(
             <p class="text-label">
               Zugesagt
             </p>
-            <p class="metric-value-success mt-1 text-3xl font-display">
+            <p class="stat-number stat-number-success mt-1">
               {stats.approved}
             </p>
           </article>
@@ -107,7 +107,7 @@ export const adminDashboardPage = new Hono<AppEnv>().get(
             <section class="grid gap-4 lg:grid-cols-[1.2fr_0.8fr]">
               <div class="site-card p-4 sm:p-5">
                 <div class="mb-3 flex items-center justify-between gap-2">
-                  <h2 class="text-2xl font-semibold">Neuen Kurs anlegen</h2>
+                  <h2 class="text-2xl">Neuen Kurs anlegen</h2>
                   <span class="section-kicker">Admin</span>
                 </div>
                 <form
@@ -276,15 +276,15 @@ export const adminDashboardPage = new Hono<AppEnv>().get(
                     <span>Warteliste aktivieren</span>
                   </label>
                   <div class="md:col-span-2">
-                    <button class="btn-primary px-4 py-2 text-sm" type="submit">
+                    <button class="btn-primary" type="submit">
                       Kurs speichern
                     </button>
                   </div>
                 </form>
               </div>
 
-              <section class="site-card p-4 sm:p-5">
-                <h2 class="text-2xl font-semibold">Kurse verwalten</h2>
+              <section class="site-card p-4 sm:p-5 lg:self-start">
+                <h2 class="text-2xl">Kurse verwalten</h2>
                 <p class="text-body-muted mt-2 text-sm">
                   Bestehende Kurse werden jetzt in einer eigenen Übersicht mit
                   Kennzahlen, Detailseite und Teilnehmerliste gepflegt.
@@ -300,7 +300,7 @@ export const adminDashboardPage = new Hono<AppEnv>().get(
                     </p>
                   </article>
                   <a
-                    class="btn-primary px-4 py-2 text-sm"
+                    class="btn-primary"
                     href="/admin/courses"
                   >
                     Zur Kursübersicht
@@ -313,9 +313,9 @@ export const adminDashboardPage = new Hono<AppEnv>().get(
 
         <section class="site-card p-4 sm:p-5">
           <div class="mb-3 flex flex-wrap items-center justify-between gap-2">
-            <h2 class="text-2xl font-semibold">Filter und Export</h2>
+            <h2 class="text-2xl">Filter und Export</h2>
             <a
-              class="btn-secondary inline-block px-3 py-2 text-xs"
+              class="btn-secondary btn-sm"
               href={`/api/admin/exports/registrations.csv?${
                 new URLSearchParams({
                   q: filters.q ?? "",
@@ -409,11 +409,11 @@ export const adminDashboardPage = new Hono<AppEnv>().get(
               value={filters.dateTo ?? ""}
             />
             <div class="flex items-center gap-2">
-              <button class="btn-primary px-3 py-2 text-xs" type="submit">
+              <button class="btn-primary btn-sm" type="submit">
                 Filtern
               </button>
               <a
-                class="btn-secondary px-3 py-2 text-xs"
+                class="btn-secondary btn-sm"
                 href="/admin/dashboard"
               >
                 Reset
@@ -423,44 +423,41 @@ export const adminDashboardPage = new Hono<AppEnv>().get(
         </section>
 
         <section class="site-card p-4 sm:p-5">
-          <h2 class="text-2xl font-semibold">Anmeldungen</h2>
-          <div class="mt-4 overflow-x-auto">
-            <table class="min-w-full text-left text-sm">
-              <thead class="text-meta border-b border-slate-200">
+          <h2 class="text-2xl">Anmeldungen</h2>
+          <div class="data-table-wrap mt-4">
+            <table class="data-table">
+              <thead>
                 <tr>
-                  <th class="px-3 py-2 font-semibold">Eingang</th>
-                  <th class="px-3 py-2 font-semibold">Teilnehmer</th>
-                  <th class="px-3 py-2 font-semibold">Kurs</th>
-                  <th class="px-3 py-2 font-semibold">Status</th>
-                  <th class="px-3 py-2 font-semibold">Aktion</th>
+                  <th>Eingang</th>
+                  <th>Teilnehmer</th>
+                  <th>Kurs</th>
+                  <th>Status</th>
+                  <th>Aktion</th>
                 </tr>
               </thead>
               <tbody>
                 {rows.length === 0
                   ? (
                     <tr>
-                      <td class="text-body-muted px-3 py-4" colSpan={5}>
+                      <td class="text-body-muted" colSpan={5}>
                         Keine Anmeldungen für die gewählten Filter gefunden.
                       </td>
                     </tr>
                   )
                   : null}
                 {rows.map((row) => (
-                  <tr
-                    key={row.id}
-                    class="border-b border-slate-100 last:border-0"
-                  >
-                    <td class="px-3 py-3">
+                  <tr key={row.id}>
+                    <td>
                       {new Date(row.submittedAt).toLocaleString("de-DE")}
                     </td>
-                    <td class="px-3 py-3">
+                    <td>
                       <div class="font-semibold">
                         {row.firstName} {row.lastName}
                       </div>
                       <div class="text-body-muted">{row.email}</div>
                     </td>
-                    <td class="px-3 py-3">{row.courseTitle}</td>
-                    <td class="px-3 py-3">
+                    <td>{row.courseTitle}</td>
+                    <td>
                       <span
                         class={statusClasses[row.status] ??
                           "status-badge status-cancelled"}
@@ -468,9 +465,9 @@ export const adminDashboardPage = new Hono<AppEnv>().get(
                         {toRegistrationStatusLabel(row.status)}
                       </span>
                     </td>
-                    <td class="px-3 py-3">
+                    <td>
                       <a
-                        class="btn-secondary px-3 py-2 text-xs"
+                        class="btn-secondary btn-sm"
                         href={`/admin/registrations/${row.id}`}
                       >
                         Öffnen

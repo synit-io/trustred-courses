@@ -1,7 +1,12 @@
-import { env } from "../env.ts";
+import { env, isDemoMode } from "../env.ts";
 import { listActiveCourses } from "../courses/repository.ts";
 import { logger } from "../observability/logger.ts";
-import type { Course, EmailOutboxJob, Registration } from "../types.ts";
+import type {
+  Course,
+  EmailLog,
+  EmailOutboxJob,
+  Registration,
+} from "../types.ts";
 import { listRegistrationsByCourse } from "../registrations/repository.ts";
 import {
   appendEmailLog,
@@ -27,6 +32,8 @@ export const EMAIL_OUTBOX_MAX_ATTEMPTS = 6;
 export interface SendMailResult {
   ok: boolean;
   error?: string;
+  /** True when DEMO_MODE swallowed the mail instead of sending it. */
+  suppressed?: boolean;
 }
 
 export type EmailSender = (
@@ -87,6 +94,33 @@ async function defaultSendMail(
 
 let emailSender: EmailSender = defaultSendMail;
 
+/**
+ * Single choke point for outgoing mail. In DEMO_MODE nothing leaves the
+ * system, regardless of which sender is configured or injected.
+ */
+async function dispatchEmail(
+  recipient: string,
+  subject: string,
+  text: string,
+  html: string,
+): Promise<SendMailResult> {
+  if (isDemoMode()) {
+    logger.info("email.suppressed_demo_mode", {
+      recipient: maskEmail(recipient),
+      subject,
+    });
+    return { ok: true, suppressed: true };
+  }
+  return await emailSender(recipient, subject, text, html);
+}
+
+function deliveryStatusFor(
+  result: SendMailResult,
+): EmailLog["deliveryStatus"] {
+  if (result.suppressed) return "suppressed";
+  return result.ok ? "sent" : "failed";
+}
+
 function maskEmail(value: string): string {
   const [local, domain] = value.split("@");
   if (!local || !domain) return "***";
@@ -118,7 +152,7 @@ async function logDelivery(
     templateKey,
     recipientEmail,
     subject,
-    deliveryStatus: result.ok ? "sent" : "failed",
+    deliveryStatus: deliveryStatusFor(result),
     errorMessage: result.ok ? null : result.error ?? "unknown",
   });
 }
@@ -243,7 +277,7 @@ export async function sendRegistrationEventEmails(
     course,
     customMessage,
   );
-  const recipientResult = await emailSender(
+  const recipientResult = await dispatchEmail(
     registration.email,
     template.subject,
     template.text,
@@ -288,7 +322,7 @@ export async function sendRegistrationEventEmails(
       `Status: ${registration.status}`,
     ].join("\n");
 
-    const adminResult = await emailSender(
+    const adminResult = await dispatchEmail(
       env.mailAdminNotificationTo,
       adminSubject,
       adminText,
@@ -323,7 +357,7 @@ async function sendPreparedEmail(
   recipientEmail: string,
   template: { subject: string; text: string; html: string },
 ): Promise<void> {
-  const result = await emailSender(
+  const result = await dispatchEmail(
     recipientEmail,
     template.subject,
     template.text,
@@ -472,7 +506,7 @@ export async function processEmailOutboxBatch(
   let processed = 0;
 
   for (const job of dueJobs.slice(0, limit)) {
-    const result = await emailSender(
+    const result = await dispatchEmail(
       job.recipientEmail,
       job.subject,
       job.text,
@@ -486,7 +520,7 @@ export async function processEmailOutboxBatch(
         : `${job.templateKey}_retry`,
       recipientEmail: job.recipientEmail,
       subject: job.subject,
-      deliveryStatus: result.ok ? "sent" : "failed",
+      deliveryStatus: deliveryStatusFor(result),
       errorMessage: result.ok ? null : result.error ?? "unknown",
       attempt: job.attempt + 1,
     });

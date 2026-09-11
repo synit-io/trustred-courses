@@ -6,7 +6,12 @@ import {
   type SendMailResult,
   type SessionRecord,
 } from "@synitio/kv-magic-link-auth";
-import { env, isLocalDebugBypassEnabled } from "../env.ts";
+import {
+  env,
+  isDebugLinkExposureEnabled,
+  isDemoMode,
+  isLocalDebugBypassEnabled,
+} from "../env.ts";
 import { getKv } from "../kv/client.ts";
 import { logger } from "../observability/logger.ts";
 import type { User } from "../types.ts";
@@ -44,6 +49,12 @@ function maskEmail(value: string): string {
 async function sendMagicLinkEmail(
   payload: SendMailPayload,
 ): Promise<SendMailResult> {
+  if (isDemoMode()) {
+    logger.info("auth.magic_link.suppressed_demo_mode", {
+      recipient: maskEmail(payload.to),
+    });
+    return { ok: false, error: "demo_mode_mail_disabled" };
+  }
   if (!env.smtpHost || !env.smtpUser || !env.smtpPass || !env.mailFromAddress) {
     logger.error("auth.magic_link.smtp_not_configured", {
       recipient: maskEmail(payload.to),
@@ -104,7 +115,7 @@ async function createAuth(): Promise<DenoKvMagicLinkAuth> {
       magicLinkTtlMinutes: env.magicLinkTtlMinutes,
       sessionIdleTtlDays: env.sessionIdleTtlDays,
       sessionAbsoluteTtlDays: env.sessionAbsoluteTtlDays,
-      authDevExposeMagicLink: isLocalDebugBypassEnabled(),
+      authDevExposeMagicLink: isDebugLinkExposureEnabled(),
       sendEmailInDebugMode: false,
       initialSuperAdminEmail: env.initialAdminEmail,
       failedAuthRateLimitMaxAttempts: env.authRateLimitMaxAttempts,
@@ -138,7 +149,9 @@ export async function issueMagicLink(
   redirectTo?: string,
   context?: MagicLinkRequestContext,
 ): Promise<MagicLinkIssueResult> {
-  if (env.authDevExposeMagicLink && !isLocalDebugBypassEnabled()) {
+  if (
+    env.authDevExposeMagicLink && !isLocalDebugBypassEnabled() && !isDemoMode()
+  ) {
     logger.warn("auth.magic_link.dev_exposed_blocked_non_localhost", {
       email: maskEmail(email),
       appBaseUrl: env.appBaseUrl,

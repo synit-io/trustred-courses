@@ -187,6 +187,7 @@ function buildEmailTimelineItem(
   },
 ): TimelineItem {
   const success = log.deliveryStatus === "sent";
+  const suppressed = log.deliveryStatus === "suppressed";
   const details = [
     `Vorlage: ${toRegistrationEmailEventLabel(log.templateKey)}`,
     `Empfänger: ${log.recipientEmail}`,
@@ -200,9 +201,13 @@ function buildEmailTimelineItem(
   return {
     id: `email-${log.id}`,
     ts: log.sentAt,
-    title: success ? "E-Mail versendet" : "E-Mail fehlgeschlagen",
+    title: suppressed
+      ? "E-Mail unterdrückt (Demo-Modus)"
+      : success
+      ? "E-Mail versendet"
+      : "E-Mail fehlgeschlagen",
     label: "E-Mail",
-    tone: success ? "success" : "danger",
+    tone: suppressed ? "warning" : success ? "success" : "danger",
     details,
   };
 }
@@ -256,7 +261,7 @@ export const adminRegistrationDetailPage = new Hono<AppEnv>().get(
           <p class="page-eyebrow">
             Anmeldungsdetails
           </p>
-          <h1 class="mt-2 text-3xl font-bold">
+          <h1 class="mt-2 text-3xl">
             {registration.firstName} {registration.lastName}
           </h1>
           <p class="text-body mt-2 text-sm">
@@ -294,7 +299,7 @@ export const adminRegistrationDetailPage = new Hono<AppEnv>().get(
 
         <div class="grid gap-6 lg:grid-cols-[1fr_360px]">
           <section class="site-card p-5">
-            <h2 class="text-2xl font-semibold">Teilnehmerdaten</h2>
+            <h2 class="text-2xl">Teilnehmerdaten</h2>
             <dl class="mt-4 grid gap-2 text-sm sm:grid-cols-2">
               <div>
                 <dt class="font-semibold">Vorname</dt>
@@ -333,7 +338,7 @@ export const adminRegistrationDetailPage = new Hono<AppEnv>().get(
 
           <aside class="space-y-4">
             <section class="site-card p-5">
-              <h2 class="text-2xl font-semibold">Statusaktion</h2>
+              <h2 class="text-2xl">Statusaktion</h2>
               {availableActions(registration.status).length === 0
                 ? (
                   <p class="text-body-muted mt-3 text-sm">
@@ -390,7 +395,7 @@ export const adminRegistrationDetailPage = new Hono<AppEnv>().get(
                       />
                     </label>
                     <button
-                      class="btn-primary w-full px-4 py-2 text-sm"
+                      class="btn-primary w-full"
                       type="submit"
                     >
                       Status aktualisieren
@@ -400,7 +405,7 @@ export const adminRegistrationDetailPage = new Hono<AppEnv>().get(
             </section>
 
             <section class="site-card p-5">
-              <h2 class="text-2xl font-semibold">E-Mail erneut senden</h2>
+              <h2 class="text-2xl">E-Mail erneut senden</h2>
               {resendOptions.length === 0
                 ? (
                   <p class="text-body-muted mt-3 text-sm">
@@ -430,7 +435,7 @@ export const adminRegistrationDetailPage = new Hono<AppEnv>().get(
                       </select>
                     </label>
                     <button
-                      class="btn-secondary w-full px-4 py-2 text-sm"
+                      class="btn-secondary w-full"
                       type="submit"
                     >
                       E-Mail senden
@@ -442,7 +447,7 @@ export const adminRegistrationDetailPage = new Hono<AppEnv>().get(
         </div>
 
         <section class="site-card p-5">
-          <h2 class="text-2xl font-semibold">Verlauf</h2>
+          <h2 class="text-2xl">Verlauf</h2>
           <p class="text-body-muted mt-1 text-sm">
             Gemeinsame Timeline aus Statusänderungen, Notizen und versendeten
             E-Mails.

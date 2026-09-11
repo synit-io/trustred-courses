@@ -64,7 +64,7 @@ export interface Registration {
   adminMessage: string | null;
   internalNotes: string | null;
   paymentStatus?: "not_required" | "paid";
-  paymentProvider?: "paypal" | null;
+  paymentProvider?: "paypal" | "demo" | null;
   paymentCaptureId?: string | null;
   paymentAmountCents?: number | null;
   paymentCurrency?: string | null;
@@ -86,7 +86,7 @@ export interface EmailLog {
   templateKey: string;
   recipientEmail: string;
   subject: string;
-  deliveryStatus: "queued" | "sent" | "failed";
+  deliveryStatus: "queued" | "sent" | "failed" | "suppressed";
   sentAt: string;
   errorMessage: string | null;
   attempt: number;

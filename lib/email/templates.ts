@@ -69,9 +69,9 @@ function renderFactsHtml(
   facts: Array<{ label: string; value: string }>,
 ): string {
   return facts.map((fact) =>
-    `<tr><td style="padding:0 0 10px;vertical-align:top;font-weight:700;color:#131b22;width:132px;">${
+    `<tr><td style="padding:0 0 10px;vertical-align:top;font-weight:700;color:#171717;width:132px;">${
       escapeHtml(fact.label)
-    }</td><td style="padding:0 0 10px;color:#24313d;">${
+    }</td><td style="padding:0 0 10px;color:#404040;">${
       escapeHtml(fact.value)
     }</td></tr>`
   ).join("");
@@ -79,7 +79,7 @@ function renderFactsHtml(
 
 function renderListHtml(items: string[]): string {
   return items.map((item) =>
-    `<li style="margin:0 0 8px 18px;color:#24313d;">${escapeHtml(item)}</li>`
+    `<li style="margin:0 0 8px 18px;color:#404040;">${escapeHtml(item)}</li>`
   ).join("");
 }
 
@@ -140,34 +140,34 @@ function renderHtmlEmail(options: HtmlEmailOptions): string {
   return `
 <!doctype html>
 <html lang="de">
-  <body style="margin:0;padding:0;background:#f8fafc;font-family:'Source Sans 3','Segoe UI',Arial,sans-serif;color:#334155;">
+  <body style="margin:0;padding:0;background:#f7f7f4;font-family:'Open Sans','Segoe UI',Arial,sans-serif;color:#262626;">
     <div style="display:none;max-height:0;overflow:hidden;opacity:0;">${
     escapeHtml(options.intro)
   }</div>
-    <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="background:#f8fafc;padding:24px 12px;">
+    <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="background:#f7f7f4;padding:24px 12px;">
       <tr>
         <td align="center">
           <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="max-width:640px;">
             <tr>
-              <td style="height:4px;border-radius:999px;background:#dc2626;font-size:0;line-height:0;">&nbsp;</td>
+              <td style="height:4px;border-radius:999px;background:#871d33;font-size:0;line-height:0;">&nbsp;</td>
             </tr>
             <tr>
-              <td style="padding:18px 6px 0;color:#64748b;font-size:12px;font-weight:700;letter-spacing:0.08em;text-transform:uppercase;">
+              <td style="padding:18px 6px 0;color:#871d33;font-size:12px;font-weight:700;letter-spacing:0.08em;text-transform:uppercase;">
                 ${escapeHtml(options.eyebrow ?? env.appName)}
               </td>
             </tr>
             <tr>
               <td style="padding-top:10px;">
-                <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="border:1px solid #e2e8f0;border-radius:18px;background:#ffffff;">
+                <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="border:1px solid #e5e5e5;border-radius:24px;background:#ffffff;">
                   <tr>
                     <td style="padding:28px 28px 24px;">
                       <div style="display:inline-flex;align-items:center;border:1px solid ${tone.border};border-radius:999px;background:${tone.bg};padding:6px 12px;color:${tone.fg};font-size:12px;font-weight:700;letter-spacing:0.06em;text-transform:uppercase;">
                         ${escapeHtml(tone.label)}
                       </div>
-                      <div style="font-family:Oswald,'Arial Narrow',Arial,sans-serif;font-size:30px;line-height:1.1;color:#131b22;font-weight:700;">
+                      <div style="font-family:'Fugaz One','Arial Black',Impact,Arial,sans-serif;font-size:30px;line-height:1.1;color:#171717;font-weight:400;text-transform:uppercase;letter-spacing:0.03em;">
                         ${escapeHtml(options.title)}
                       </div>
-                      <p style="margin:16px 0 0;font-size:16px;line-height:1.6;color:#334155;">
+                      <p style="margin:16px 0 0;font-size:16px;line-height:1.6;color:#262626;">
                         ${escapeHtml(options.intro)}
                       </p>
                       ${
@@ -184,10 +184,10 @@ function renderHtmlEmail(options: HtmlEmailOptions): string {
             </tr>
             <tr>
               <td style="padding-top:16px;">
-                <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="border:1px solid #e2e8f0;border-radius:14px;background:#ffffff;">
+                <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="border:1px solid #e5e5e5;border-radius:20px;background:#ffffff;">
                   <tr>
                     <td style="padding:22px 24px;">
-                      <div style="font-family:Oswald,'Arial Narrow',Arial,sans-serif;font-size:22px;line-height:1.1;color:#131b22;font-weight:700;">
+                      <div style="font-family:'Fugaz One','Arial Black',Impact,Arial,sans-serif;font-size:22px;line-height:1.1;color:#171717;font-weight:400;text-transform:uppercase;letter-spacing:0.03em;">
                         Kursdetails
                       </div>
                       <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="margin-top:16px;font-size:15px;line-height:1.5;">
@@ -195,7 +195,7 @@ function renderHtmlEmail(options: HtmlEmailOptions): string {
                       </table>
                       ${
     details.length > 0
-      ? `<div style="margin-top:8px;font-family:Oswald,'Arial Narrow',Arial,sans-serif;font-size:20px;line-height:1.1;color:#131b22;font-weight:700;">Wichtige Hinweise</div><ul style="margin:12px 0 0;padding:0 0 0 4px;font-size:15px;line-height:1.6;">${
+      ? `<div style="margin-top:8px;font-family:'Fugaz One','Arial Black',Impact,Arial,sans-serif;font-size:20px;line-height:1.1;color:#171717;font-weight:400;text-transform:uppercase;letter-spacing:0.03em;">Wichtige Hinweise</div><ul style="margin:12px 0 0;padding:0 0 0 4px;font-size:15px;line-height:1.6;">${
         renderListHtml(details)
       }</ul>`
       : ""
@@ -204,7 +204,7 @@ function renderHtmlEmail(options: HtmlEmailOptions): string {
     options.action
       ? `<div style="margin-top:22px;"><a href="${
         escapeHtml(options.action.href)
-      }" style="display:inline-block;border-radius:10px;background:#dc2626;color:#ffffff;text-decoration:none;font-weight:700;padding:12px 18px;">${
+      }" style="display:inline-block;border-radius:10px;background:#871d33;color:#ffffff;text-decoration:none;font-weight:700;padding:12px 18px;">${
         escapeHtml(options.action.label)
       }</a></div>`
       : ""

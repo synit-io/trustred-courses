@@ -1,4 +1,4 @@
-import { env } from "@/lib/env.ts";
+import { env, isDemoMode } from "@/lib/env.ts";
 import type { SessionUser } from "@/src/app/context.ts";
 
 export function RootDocument(
@@ -12,6 +12,8 @@ export function RootDocument(
     ]
     : [{ href: "/", label: "Kurse" }];
   const navCount = navItems.length + 1;
+  const year = new Date().getFullYear();
+  const demoMode = isDemoMode();
 
   return (
     <html lang="de-DE">
@@ -31,17 +33,33 @@ export function RootDocument(
           crossorigin=""
         />
         <link
-          href="https://fonts.googleapis.com/css2?family=Oswald:wght@400;500;600;700&family=Source+Sans+3:wght@400;600;700&display=swap"
+          href="https://fonts.googleapis.com/css2?family=Fugaz+One&family=Open+Sans:wght@400;600;700&display=swap"
           rel="stylesheet"
         />
         <script src="/static/embed.js" defer />
       </head>
       <body class="app-shell">
         <div class="top-stripe" />
+        {demoMode
+          ? (
+            <div class="notice-bar" role="status">
+              <div class="mx-auto flex max-w-6xl flex-wrap items-center gap-3 px-4 py-3 text-sm font-semibold">
+                <span class="notice-kicker">Demo</span>
+                <span>
+                  Demo-System mit Beispieldaten. E-Mail-Versand und Zahlungen
+                  sind deaktiviert.
+                </span>
+              </div>
+            </div>
+          )
+          : null}
         <header class="site-header">
-          <div class="mx-auto flex max-w-6xl items-center justify-between px-4 py-4">
-            <a href="/" class="font-display text-xl font-semibold">
-              {env.appName}
+          <div class="mx-auto flex max-w-6xl items-center justify-between gap-4 px-4 py-4">
+            <a href="/" class="brand-block">
+              <span class="brand-mark">{env.appName}</span>
+              {env.appTagline
+                ? <span class="brand-tagline">{env.appTagline}</span>
+                : null}
             </a>
             <div class="site-nav" data-nav-count={String(navCount)}>
               <button
@@ -58,10 +76,10 @@ export function RootDocument(
                   <span />
                 </span>
               </button>
-              <nav class="site-nav-panel text-sm">
+              <nav class="site-nav-panel">
                 {navItems.map((item) => (
                   <a
-                    class="site-nav-link px-2 py-1"
+                    class="site-nav-link"
                     href={item.href}
                     key={item.href}
                   >
@@ -72,16 +90,17 @@ export function RootDocument(
                   ? (
                     <form action="/api/auth/logout" method="post">
                       <button
-                        class="btn-secondary site-nav-button px-2 py-1 text-xs"
+                        class="btn-secondary btn-sm site-nav-button"
+                        title={user.email}
                         type="submit"
                       >
-                        Logout ({user.email})
+                        Logout
                       </button>
                     </form>
                   )
                   : (
                     <a
-                      class="btn-primary site-nav-button px-3 py-2 text-xs"
+                      class="btn-primary btn-sm site-nav-button"
                       href="/admin/login"
                     >
                       Login
@@ -92,17 +111,62 @@ export function RootDocument(
           </div>
         </header>
         <main class="main-shell mx-auto max-w-6xl px-4 py-8">{children}</main>
-        <footer class="mx-auto mt-8 w-full max-w-6xl border-t border-neutral-200 px-4 py-6 text-sm text-body-muted">
-          <div class="flex flex-wrap items-center justify-between gap-2">
-            <p>
-              {env.appName} - Kontakt:{" "}
-              <a class="underline" href={`mailto:${env.legalEmail}`}>
-                {env.legalEmail}
-              </a>
-            </p>
-            <div class="flex items-center gap-3">
-              <a class="underline" href="/impressum">Impressum</a>
-              <a class="underline" href="/datenschutz">Datenschutz</a>
+        <footer class="site-footer">
+          <div class="mx-auto grid max-w-6xl gap-10 px-4 py-14 md:grid-cols-[1.4fr_1fr_1fr]">
+            <div>
+              <h2 class="text-xl">{env.appName}</h2>
+              {env.appTagline
+                ? <p class="site-footer-tagline">{env.appTagline}</p>
+                : null}
+              <p class="site-footer-text mt-4 max-w-md text-sm">
+                Kursangebot mit Online-Anmeldung von {env.legalOrganizationName}
+              </p>
+            </div>
+            <div>
+              <h3 class="mb-3 text-lg">Navigation</h3>
+              <ul class="space-y-2 text-sm">
+                <li>
+                  <a href="/">Kurse</a>
+                </li>
+                <li>
+                  {user
+                    ? <a href="/admin/dashboard">Dashboard</a>
+                    : <a href="/admin/login">Login</a>}
+                </li>
+                <li>
+                  <a href="/impressum">Impressum</a>
+                </li>
+                <li>
+                  <a href="/datenschutz">Datenschutz</a>
+                </li>
+              </ul>
+            </div>
+            <div>
+              <h3 class="mb-3 text-lg">Kontakt</h3>
+              <div class="site-footer-text space-y-1 text-sm">
+                <p>{env.legalOrganizationName}</p>
+                <p>{env.legalStreet}</p>
+                <p>
+                  {env.legalPostalCode} {env.legalCity}
+                </p>
+                <p class="pt-2">
+                  E-Mail:{" "}
+                  <a class="underline" href={`mailto:${env.legalEmail}`}>
+                    {env.legalEmail}
+                  </a>
+                </p>
+              </div>
+            </div>
+          </div>
+          <div class="site-footer-bottom">
+            <div class="mx-auto flex max-w-6xl flex-wrap items-center justify-between gap-3 px-4 py-4">
+              <p>
+                © {year} {env.legalOrganizationName}
+              </p>
+              <div class="flex items-center gap-4">
+                <a href="/impressum">Impressum</a>
+                <a href="/datenschutz">Datenschutz</a>
+              </div>
             </div>
           </div>
         </footer>

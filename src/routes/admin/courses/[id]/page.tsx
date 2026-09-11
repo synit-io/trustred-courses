@@ -14,8 +14,13 @@ import {
 } from "@/src/routes/shared/constants.ts";
 import { Hono } from "hono";
 
-function paymentStatusLabel(paymentStatus?: string): string {
-  if (paymentStatus === "paid") return "Bezahlt";
+function paymentStatusLabel(
+  paymentStatus?: string,
+  paymentProvider?: string | null,
+): string {
+  if (paymentStatus === "paid") {
+    return paymentProvider === "demo" ? "Bezahlt (Demo)" : "Bezahlt";
+  }
   if (paymentStatus === "not_required") return "Nicht erforderlich";
   return "Offen";
 }
@@ -42,7 +47,7 @@ export const adminCourseDetailPage = new Hono<AppEnv>().get(
           <div class="flex flex-wrap items-start justify-between gap-3">
             <div>
               <span class="section-kicker">Kursdetails</span>
-              <h1 class="mt-3 text-4xl font-bold">{course.title}</h1>
+              <h1 class="mt-3 text-4xl">{course.title}</h1>
               <p class="text-body mt-3 max-w-3xl text-sm sm:text-base">
                 {course.description}
               </p>
@@ -55,10 +60,10 @@ export const adminCourseDetailPage = new Hono<AppEnv>().get(
             </div>
           </div>
           <div class="mt-4 flex flex-wrap gap-2">
-            <a class="btn-secondary px-3 py-2 text-xs" href="/admin/courses">
+            <a class="btn-secondary btn-sm" href="/admin/courses">
               Zur Kursübersicht
             </a>
-            <a class="btn-secondary px-3 py-2 text-xs" href="/admin/dashboard">
+            <a class="btn-secondary btn-sm" href="/admin/dashboard">
               Zur Administration
             </a>
           </div>
@@ -91,7 +96,7 @@ export const adminCourseDetailPage = new Hono<AppEnv>().get(
             <p class="text-label">
               Anmeldungen
             </p>
-            <p class="metric-value mt-1 text-3xl font-display">
+            <p class="stat-number mt-1">
               {summary.registrationCount}
             </p>
           </article>
@@ -99,7 +104,7 @@ export const adminCourseDetailPage = new Hono<AppEnv>().get(
             <p class="text-label">
               Zugesagt
             </p>
-            <p class="metric-value-success mt-1 text-3xl font-display">
+            <p class="stat-number stat-number-success mt-1">
               {summary.attendeeCount}
             </p>
           </article>
@@ -107,7 +112,7 @@ export const adminCourseDetailPage = new Hono<AppEnv>().get(
             <p class="text-label">
               Warteliste
             </p>
-            <p class="metric-value-warning mt-1 text-3xl font-display">
+            <p class="stat-number stat-number-warning mt-1">
               {summary.waitlistedCount}
             </p>
           </article>
@@ -115,7 +120,7 @@ export const adminCourseDetailPage = new Hono<AppEnv>().get(
             <p class="text-label">
               Freie Plätze
             </p>
-            <p class="metric-value-info mt-1 text-3xl font-display">
+            <p class="stat-number stat-number-info mt-1">
               {summary.availableSlots}
             </p>
           </article>
@@ -123,7 +128,7 @@ export const adminCourseDetailPage = new Hono<AppEnv>().get(
             <p class="text-label">
               Kursgebühr
             </p>
-            <p class="metric-value mt-1 text-3xl font-display">
+            <p class="stat-number stat-number-sm mt-1">
               {course.pricingType === "paid"
                 ? formatCourseFee(course.feeAmountCents, course.feeCurrency)
                 : "Kostenfrei"}
@@ -133,7 +138,7 @@ export const adminCourseDetailPage = new Hono<AppEnv>().get(
             <p class="text-label">
               Gesamtumsatz
             </p>
-            <p class="metric-value-success mt-1 text-3xl font-display">
+            <p class="stat-number stat-number-success stat-number-sm mt-1">
               {course.pricingType === "paid"
                 ? formatCourseFee(summary.totalRevenueCents, course.feeCurrency)
                 : "-"}
@@ -153,7 +158,7 @@ export const adminCourseDetailPage = new Hono<AppEnv>().get(
             <section class="site-card p-5">
               <div class="flex flex-wrap items-center justify-between gap-2">
                 <div>
-                  <h2 class="text-2xl font-semibold">Kurs bearbeiten</h2>
+                  <h2 class="text-2xl">Kurs bearbeiten</h2>
                   <p class="text-body-muted mt-1 text-sm">
                     Stammdaten, Zeitraum, Status und Warteliste verwalten.
                   </p>
@@ -340,7 +345,7 @@ export const adminCourseDetailPage = new Hono<AppEnv>().get(
                   <span>Warteliste aktivieren</span>
                 </label>
                 <div class="flex flex-wrap items-center gap-2 md:col-span-2">
-                  <button class="btn-primary px-3 py-2 text-xs" type="submit">
+                  <button class="btn-primary btn-sm" type="submit">
                     Kurs aktualisieren
                   </button>
                   <span class="text-meta text-xs">
@@ -354,7 +359,7 @@ export const adminCourseDetailPage = new Hono<AppEnv>().get(
                   method="post"
                 >
                   <button
-                    class="btn-secondary px-3 py-2 text-xs"
+                    class="btn-secondary btn-sm"
                     type="submit"
                   >
                     Schliessen
@@ -365,7 +370,7 @@ export const adminCourseDetailPage = new Hono<AppEnv>().get(
                   method="post"
                 >
                   <button
-                    class="btn-destructive px-3 py-2 text-xs"
+                    class="btn-destructive btn-sm"
                     type="submit"
                   >
                     Löschen
@@ -377,46 +382,43 @@ export const adminCourseDetailPage = new Hono<AppEnv>().get(
           : null}
 
         <section class="site-card p-5">
-          <h2 class="text-2xl font-semibold">Teilnehmer und Anmeldungen</h2>
+          <h2 class="text-2xl">Teilnehmer und Anmeldungen</h2>
           <p class="text-body-muted mt-1 text-sm">
             Alle Anmeldungen für diesen Kurs mit aktuellem Bearbeitungsstatus.
           </p>
-          <div class="mt-4 overflow-x-auto">
-            <table class="min-w-full text-left text-sm">
-              <thead class="text-meta border-b border-slate-200">
+          <div class="data-table-wrap mt-4">
+            <table class="data-table">
+              <thead>
                 <tr>
-                  <th class="px-3 py-2 font-semibold">Name</th>
-                  <th class="px-3 py-2 font-semibold">E-Mail</th>
-                  <th class="px-3 py-2 font-semibold">Telefon</th>
-                  <th class="px-3 py-2 font-semibold">Status</th>
-                  <th class="px-3 py-2 font-semibold">Zahlung</th>
-                  <th class="px-3 py-2 font-semibold">Eingang</th>
-                  <th class="px-3 py-2 font-semibold">Aktion</th>
+                  <th>Name</th>
+                  <th>E-Mail</th>
+                  <th>Telefon</th>
+                  <th>Status</th>
+                  <th>Zahlung</th>
+                  <th>Eingang</th>
+                  <th>Aktion</th>
                 </tr>
               </thead>
               <tbody>
                 {registrations.length === 0
                   ? (
                     <tr>
-                      <td class="text-body-muted px-3 py-4" colSpan={7}>
+                      <td class="text-body-muted" colSpan={7}>
                         Noch keine Anmeldungen für diesen Kurs vorhanden.
                       </td>
                     </tr>
                   )
                   : null}
                 {registrations.map((registration) => (
-                  <tr
-                    key={registration.id}
-                    class="border-b border-slate-100 last:border-0"
-                  >
-                    <td class="px-3 py-3">
+                  <tr key={registration.id}>
+                    <td>
                       <div class="font-semibold">
                         {registration.firstName} {registration.lastName}
                       </div>
                     </td>
-                    <td class="px-3 py-3">{registration.email}</td>
-                    <td class="px-3 py-3">{registration.phone || "-"}</td>
-                    <td class="px-3 py-3">
+                    <td>{registration.email}</td>
+                    <td>{registration.phone || "-"}</td>
+                    <td>
                       <span
                         class={statusClasses[registration.status] ??
                           "status-badge status-cancelled"}
@@ -424,10 +426,13 @@ export const adminCourseDetailPage = new Hono<AppEnv>().get(
                         {toRegistrationStatusLabel(registration.status)}
                       </span>
                     </td>
-                    <td class="px-3 py-3">
+                    <td>
                       <div class="space-y-1">
                         <span class="status-badge status-info">
-                          {paymentStatusLabel(registration.paymentStatus)}
+                          {paymentStatusLabel(
+                            registration.paymentStatus,
+                            registration.paymentProvider,
+                          )}
                         </span>
                         {registration.paymentStatus === "paid"
                           ? (
@@ -442,14 +447,14 @@ export const adminCourseDetailPage = new Hono<AppEnv>().get(
                           : null}
                       </div>
                     </td>
-                    <td class="px-3 py-3">
+                    <td>
                       {new Date(registration.submittedAt).toLocaleString(
                         "de-DE",
                       )}
                     </td>
-                    <td class="px-3 py-3">
+                    <td>
                       <a
-                        class="btn-secondary px-3 py-2 text-xs"
+                        class="btn-secondary btn-sm"
                         href={`/admin/registrations/${registration.id}`}
                       >
                         Details

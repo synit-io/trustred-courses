@@ -1,5 +1,5 @@
 import { getCourseById } from "@/lib/courses/repository.ts";
-import { env, isLocalDebugBypassEnabled } from "@/lib/env.ts";
+import { env, isDebugLinkExposureEnabled, isDemoMode } from "@/lib/env.ts";
 import {
   extractRequestTraceContext,
   logger,
@@ -141,11 +141,37 @@ registrationCreateRoute.post(
           courseId,
           status: created.registration.status,
         });
-        const confirmDebug = isLocalDebugBypassEnabled()
+        const confirmDebug = isDebugLinkExposureEnabled()
           ? `&confirm_debug=${encodeURIComponent(created.confirmationUrl)}`
           : "";
         return c.redirect(
           `/courses/${courseId}?doi_sent=1${confirmDebug}`,
+          303,
+        );
+      }
+
+      if (isDemoMode()) {
+        // DEMO_MODE: no external payment provider. Record a clearly marked
+        // demo payment so the paid-course flow stays demonstrable end to end.
+        const created = await submitRegistrationWithDoubleOptIn(
+          registrationInput,
+          {
+            provider: "demo",
+            captureId: `DEMO-${crypto.randomUUID()}`,
+            amountCents: course.feeAmountCents ?? 0,
+            currency: course.feeCurrency ?? "EUR",
+            paidAt: new Date().toISOString(),
+          },
+        );
+        logger.info("registration.create.demo_payment_recorded", {
+          ...trace,
+          registrationId: created.registration.id,
+          courseId,
+        });
+        return c.redirect(
+          `/courses/${courseId}?doi_sent=1&payment_success=1&confirm_debug=${
+            encodeURIComponent(created.confirmationUrl)
+          }`,
           303,
         );
       }

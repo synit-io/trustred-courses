@@ -1,3 +1,4 @@
+import { isDemoMode } from "@/lib/env.ts";
 import { Input } from "@/src/components/ui/forms.tsx";
 import { getPublicCourseDetailSnapshot } from "@/lib/public_snapshot/service.ts";
 import type { AppEnv } from "@/src/app/context.ts";
@@ -7,6 +8,13 @@ import {
   registrationWindowState,
 } from "@/src/routes/shared/helpers.ts";
 import { Hono } from "hono";
+
+function formatDateTime(value: string): string {
+  return new Date(value).toLocaleString("de-DE", {
+    dateStyle: "medium",
+    timeStyle: "short",
+  });
+}
 
 export const courseDetailsPage = new Hono<AppEnv>().get(
   "/:courseId",
@@ -20,6 +28,9 @@ export const courseDetailsPage = new Hono<AppEnv>().get(
     const course = snapshot.course;
     const seats = snapshot.seats;
     const regWindow = registrationWindowState(course);
+    const feeLabel = course.pricingType === "paid"
+      ? formatCourseFee(course.feeAmountCents, course.feeCurrency)
+      : "Kostenfrei";
 
     const success = c.req.query("success") === "1";
     const doiSent = c.req.query("doi_sent") === "1";
@@ -32,63 +43,60 @@ export const courseDetailsPage = new Hono<AppEnv>().get(
     const courseError = c.req.query("course_error");
 
     return c.render(
-      <div class="space-y-6">
-        <section class="hero-surface">
-          <div class="space-y-4">
-            <div class="flex flex-wrap items-center gap-2">
-              <span class="section-kicker">Kursanmeldung</span>
-              <span class={regWindow.className}>{regWindow.label}</span>
-              {seats.full
-                ? <span class="status-badge status-rejected">Ausgebucht</span>
-                : null}
-            </div>
-            <h1 class="text-4xl font-bold">{course.title}</h1>
-            <p class="text-body max-w-3xl text-base">
-              {course.description}
-            </p>
-            <div class="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-              <article class="fact-tile">
-                <p class="text-label">Ort</p>
-                <p class="metric-value mt-1 text-sm font-semibold">
-                  {course.location}
-                </p>
-              </article>
-              <article class="fact-tile">
-                <p class="text-label">Beginn</p>
-                <p class="metric-value mt-1 text-sm font-semibold">
-                  {new Date(course.startsAt).toLocaleString("de-DE")}
-                </p>
-              </article>
-              <article class="fact-tile">
-                <p class="text-label">Ende</p>
-                <p class="metric-value mt-1 text-sm font-semibold">
-                  {new Date(course.endsAt).toLocaleString("de-DE")}
-                </p>
-              </article>
-              <article class="fact-tile">
-                <p class="text-label">Verfügbarkeit</p>
-                <p class="metric-value mt-1 text-sm font-semibold">
-                  {seats.available} freie Plätze
-                </p>
-                <p class="text-body-muted mt-1 text-xs">
-                  {seats.total} gesamt
-                </p>
-              </article>
-              <article class="fact-tile">
-                <p class="text-label">Teilnahmegebühr</p>
-                <p class="metric-value mt-1 text-sm font-semibold">
-                  {course.pricingType === "paid"
-                    ? formatCourseFee(course.feeAmountCents, course.feeCurrency)
-                    : "Kostenfrei"}
-                </p>
-              </article>
-            </div>
+      <div class="space-y-8">
+        <section class="page-hero">
+          <div class="flex flex-wrap items-center gap-2">
+            <span class="section-kicker mb-0">Kursanmeldung</span>
+            <span class={regWindow.className}>{regWindow.label}</span>
+            {seats.full
+              ? <span class="status-badge status-rejected">Ausgebucht</span>
+              : null}
+          </div>
+          <h1 class="mt-3 max-w-4xl text-4xl sm:text-5xl">{course.title}</h1>
+          <p class="text-body mt-4 max-w-3xl text-lg">
+            {course.description}
+          </p>
+          <div class="mt-6 grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
+            <article class="fact-tile">
+              <p class="text-label">Ort</p>
+              <p class="metric-value mt-1 text-sm font-semibold">
+                {course.location}
+              </p>
+            </article>
+            <article class="fact-tile">
+              <p class="text-label">Beginn</p>
+              <p class="metric-value mt-1 text-sm font-semibold">
+                {formatDateTime(course.startsAt)}
+              </p>
+            </article>
+            <article class="fact-tile">
+              <p class="text-label">Ende</p>
+              <p class="metric-value mt-1 text-sm font-semibold">
+                {formatDateTime(course.endsAt)}
+              </p>
+            </article>
+            <article class="fact-tile">
+              <p class="text-label">Verfügbarkeit</p>
+              <p class="metric-value mt-1 text-sm font-semibold">
+                {seats.available} freie Plätze
+              </p>
+              <p class="text-body-muted mt-1 text-xs">
+                {seats.total} gesamt
+              </p>
+            </article>
+            <article class="fact-tile">
+              <p class="text-label">Teilnahmegebühr</p>
+              <p class="metric-value mt-1 text-sm font-semibold">
+                {feeLabel}
+              </p>
+            </article>
           </div>
         </section>
 
         <div class="grid gap-6 lg:grid-cols-[1fr_1.1fr]">
           <section class="site-card p-6">
-            <h2 class="text-2xl font-semibold">Kursdetails</h2>
+            <p class="section-kicker">Überblick</p>
+            <h2 class="text-2xl">Kursdetails</h2>
             <dl class="mt-4 space-y-2 text-sm">
               <div>
                 <dt class="inline font-semibold">Ort:</dt>{" "}
@@ -96,15 +104,11 @@ export const courseDetailsPage = new Hono<AppEnv>().get(
               </div>
               <div>
                 <dt class="inline font-semibold">Beginn:</dt>{" "}
-                <dd class="inline">
-                  {new Date(course.startsAt).toLocaleString("de-DE")}
-                </dd>
+                <dd class="inline">{formatDateTime(course.startsAt)}</dd>
               </div>
               <div>
                 <dt class="inline font-semibold">Ende:</dt>{" "}
-                <dd class="inline">
-                  {new Date(course.endsAt).toLocaleString("de-DE")}
-                </dd>
+                <dd class="inline">{formatDateTime(course.endsAt)}</dd>
               </div>
               <div>
                 <dt class="inline font-semibold">Teilnehmerlimit:</dt>{" "}
@@ -114,20 +118,14 @@ export const courseDetailsPage = new Hono<AppEnv>().get(
               </div>
               <div>
                 <dt class="inline font-semibold">Gebühr:</dt>{" "}
-                <dd class="inline">
-                  {course.pricingType === "paid"
-                    ? formatCourseFee(course.feeAmountCents, course.feeCurrency)
-                    : "Kostenfrei"}
-                </dd>
+                <dd class="inline">{feeLabel}</dd>
               </div>
               {course.registrationOpensAt
                 ? (
                   <div>
                     <dt class="inline font-semibold">Anmeldung ab:</dt>{" "}
                     <dd class="inline">
-                      {new Date(course.registrationOpensAt).toLocaleString(
-                        "de-DE",
-                      )}
+                      {formatDateTime(course.registrationOpensAt)}
                     </dd>
                   </div>
                 )
@@ -137,9 +135,7 @@ export const courseDetailsPage = new Hono<AppEnv>().get(
                   <div>
                     <dt class="inline font-semibold">Anmeldung bis:</dt>{" "}
                     <dd class="inline">
-                      {new Date(course.registrationClosesAt).toLocaleString(
-                        "de-DE",
-                      )}
+                      {formatDateTime(course.registrationClosesAt)}
                     </dd>
                   </div>
                 )
@@ -147,14 +143,14 @@ export const courseDetailsPage = new Hono<AppEnv>().get(
             </dl>
             {regWindow.open && seats.lowCapacity
               ? (
-                <p class="callout-warning mt-3">
+                <p class="callout-warning mt-4">
                   Fast ausgebucht: Es sind nur noch wenige Plätze verfügbar.
                 </p>
               )
               : null}
             {regWindow.open && seats.full
               ? (
-                <p class="callout-danger mt-3">
+                <p class="callout-danger mt-4">
                   Ausgebucht.
                   {course.waitingListEnabled
                     ? " Du kannst dich weiterhin für die Warteliste anmelden."
@@ -162,20 +158,20 @@ export const courseDetailsPage = new Hono<AppEnv>().get(
                 </p>
               )
               : null}
-            <ul class="mt-5 space-y-2 text-sm">
-              <li class="fact-tile">
-                <strong class="metric-value block">Anmeldung</strong>
+            <ul class="feature-list mt-5">
+              <li>
+                <strong>Anmeldung</strong>
                 Nach Prüfung ihrer Anmeldung erhalten Sie eine Bestätigung per
                 E-Mail.
               </li>
-              <li class="fact-tile">
-                <strong class="metric-value block">Information</strong>
+              <li>
+                <strong>Information</strong>
                 {course.waitingListEnabled
                   ? "Bei voller Auslastung erfolgt die Aufnahme in die Warteliste."
                   : "Bei voller Auslastung sind keine weiteren Anmeldungen möglich."}
               </li>
-              <li class="fact-tile">
-                <strong class="metric-value block">Bearbeitung</strong>
+              <li>
+                <strong>Bearbeitung</strong>
                 Die Reihenfolge der Bearbeitung richtet sich nach Verfügbarkeit
                 und eingegangener Anmeldung.
               </li>
@@ -183,35 +179,39 @@ export const courseDetailsPage = new Hono<AppEnv>().get(
           </section>
 
           <section class="site-card p-6">
-            <h2 class="text-2xl font-semibold">Anmeldung</h2>
-            <p class="text-body-muted mt-1 text-sm">
+            <p class="section-kicker">Jetzt teilnehmen</p>
+            <h2 class="text-2xl">Anmeldung</h2>
+            <p class="text-body-muted mt-2 text-sm">
               Bitte trage deine Daten vollständig ein.
               {course.pricingType === "paid"
-                ? ` Die Kursgebühr (${
-                  formatCourseFee(course.feeAmountCents, course.feeCurrency)
-                }) wird bei der Anmeldung per PayPal bezahlt.`
+                ? isDemoMode()
+                  ? ` Die Kursgebühr (${feeLabel}) wird im Demo-Modus nur simuliert.`
+                  : ` Die Kursgebühr (${feeLabel}) wird bei der Anmeldung per PayPal bezahlt.`
                 : ""}
             </p>
             <p class="text-meta mt-1 text-xs">
               <span class="required-mark">*</span> markiert Pflichtfelder.
             </p>
             <div class="mt-4 grid gap-2 sm:grid-cols-3">
-              <article class="fact-tile">
-                <p class="text-label">1. Daten</p>
+              <article class="step-tile">
+                <p class="step-index">1</p>
+                <p class="text-label mt-2">Daten</p>
                 <p class="metric-value mt-1 text-sm font-semibold">
                   Vollständig eintragen
                 </p>
               </article>
-              <article class="fact-tile">
-                <p class="text-label">2. Bestätigung</p>
+              <article class="step-tile">
+                <p class="step-index">2</p>
+                <p class="text-label mt-2">Bestätigung</p>
                 <p class="metric-value mt-1 text-sm font-semibold">
                   {course.pricingType === "paid"
                     ? "PayPal + E-Mail"
                     : "E-Mail prüfen"}
                 </p>
               </article>
-              <article class="fact-tile">
-                <p class="text-label">3. Rückmeldung</p>
+              <article class="step-tile">
+                <p class="step-index">3</p>
+                <p class="text-label mt-2">Rückmeldung</p>
                 <p class="metric-value mt-1 text-sm font-semibold">
                   Status erhalten
                 </p>
@@ -219,7 +219,7 @@ export const courseDetailsPage = new Hono<AppEnv>().get(
             </div>
             {!regWindow.open
               ? (
-                <p class="callout-warning mt-3">
+                <p class="callout-warning mt-4">
                   Die Anmeldung ist aktuell nicht möglich:{" "}
                   <strong>{regWindow.label}</strong>
                 </p>
@@ -228,7 +228,7 @@ export const courseDetailsPage = new Hono<AppEnv>().get(
 
             {doiSent
               ? (
-                <p class="callout-info mt-3">
+                <p class="callout-info mt-4">
                   {paymentSuccess
                     ? "Zahlung erfolgreich. Bitte bestätige jetzt deine E-Mail-Adresse über den Bestätigungslink."
                     : "Bitte bestätige zuerst deine E-Mail-Adresse über den Bestätigungslink."}
@@ -237,7 +237,9 @@ export const courseDetailsPage = new Hono<AppEnv>().get(
                       <>
                         {" "}
                         <a class="font-semibold underline" href={confirmDebug}>
-                          Dev-Link zur Bestätigung
+                          {isDemoMode()
+                            ? "Demo-Modus: Bestätigung direkt öffnen"
+                            : "Dev-Link zur Bestätigung"}
                         </a>
                       </>
                     )
@@ -247,7 +249,7 @@ export const courseDetailsPage = new Hono<AppEnv>().get(
               : null}
             {paymentCancelled
               ? (
-                <p class="callout-warning mt-3">
+                <p class="callout-warning mt-4">
                   Die PayPal-Zahlung wurde abgebrochen. Deine Anmeldung wurde
                   nicht übernommen.
                 </p>
@@ -256,7 +258,7 @@ export const courseDetailsPage = new Hono<AppEnv>().get(
 
             {confirmError
               ? (
-                <p class="callout-danger mt-3">
+                <p class="callout-danger mt-4">
                   Der Bestätigungslink ist ungültig oder abgelaufen. Bitte
                   registriere dich erneut.
                 </p>
@@ -264,7 +266,7 @@ export const courseDetailsPage = new Hono<AppEnv>().get(
               : null}
             {courseError
               ? (
-                <p class="callout-danger mt-3">
+                <p class="callout-danger mt-4">
                   {courseError}
                 </p>
               )
@@ -272,7 +274,7 @@ export const courseDetailsPage = new Hono<AppEnv>().get(
 
             {confirmed || success
               ? (
-                <p class="callout-success mt-3">
+                <p class="callout-success mt-4">
                   Anmeldung bestätigt. Status:{" "}
                   <strong>{toRegistrationStatusLabel(status)}</strong>
                 </p>
@@ -282,7 +284,7 @@ export const courseDetailsPage = new Hono<AppEnv>().get(
             {regWindow.open && (!seats.full || course.waitingListEnabled)
               ? (
                 <form
-                  class="mt-4 grid gap-3 sm:grid-cols-2"
+                  class="mt-5 grid gap-4 sm:grid-cols-2"
                   action="/api/registrations/create"
                   method="post"
                 >
@@ -296,7 +298,7 @@ export const courseDetailsPage = new Hono<AppEnv>().get(
                   <Input id="email" label="E-Mail" type="email" />
                   <Input id="phone" label="Telefonnummer" required={false} />
                   <label
-                    class="col-span-full mt-2 flex items-start gap-2 text-sm"
+                    class="col-span-full mt-1 flex items-start gap-3 text-sm"
                     htmlFor="consentAccepted"
                   >
                     <input
@@ -311,10 +313,7 @@ export const courseDetailsPage = new Hono<AppEnv>().get(
                       Kursanmeldung zu.
                     </span>
                   </label>
-                  <button
-                    class="btn-primary col-span-full px-4 py-2 text-sm"
-                    type="submit"
-                  >
+                  <button class="btn-primary col-span-full" type="submit">
                     {seats.full && course.waitingListEnabled
                       ? "Für Warteliste anmelden"
                       : course.pricingType === "paid"
@@ -324,9 +323,9 @@ export const courseDetailsPage = new Hono<AppEnv>().get(
                 </form>
               )
               : null}
-            <div class="mt-4">
-              <a class="btn-secondary inline-flex px-4 py-2 text-sm" href="/">
-                Zurück
+            <div class="mt-5">
+              <a class="btn-tertiary" href="/">
+                Zurück zur Übersicht
               </a>
             </div>
           </section>

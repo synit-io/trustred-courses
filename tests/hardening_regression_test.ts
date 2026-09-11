@@ -2,6 +2,7 @@ import { assert, assertEquals } from "@std/assert";
 import { Hono } from "hono";
 import { queryRegistrationRows } from "../lib/admin/registration_rows.ts";
 import { upsertCourse } from "../lib/courses/repository.ts";
+import { env } from "../lib/env.ts";
 import { enqueueEmailOutboxOnce } from "../lib/email/repository.ts";
 import {
   __setEmailSenderForTests,
@@ -370,27 +371,28 @@ Deno.test("admin cannot create a super admin", async () => {
 });
 
 Deno.test("admin mutation rejects missing and foreign origins", async () => {
+  const appOrigin = new URL(env.appBaseUrl).origin;
   const app = new Hono<AppEnv>();
   registerGlobalMiddleware(app);
   app.post("/api/admin/probe", (c) => c.text("ok"));
   assertEquals(
-    (await app.request("http://localhost:8000/api/admin/probe", {
+    (await app.request(`${appOrigin}/api/admin/probe`, {
       method: "POST",
     }))
       .status,
     403,
   );
   assertEquals(
-    (await app.request("http://localhost:8000/api/admin/probe", {
+    (await app.request(`${appOrigin}/api/admin/probe`, {
       method: "POST",
       headers: { Origin: "https://attacker.localhost" },
     })).status,
     403,
   );
   assertEquals(
-    (await app.request("http://localhost:8000/api/admin/probe", {
+    (await app.request(`${appOrigin}/api/admin/probe`, {
       method: "POST",
-      headers: { Origin: "http://localhost:8000" },
+      headers: { Origin: appOrigin },
     })).status,
     401,
   );

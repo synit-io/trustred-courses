@@ -1,5 +1,5 @@
 import nodemailer from "nodemailer";
-import { ensureSmtpConfig, env } from "../lib/env.ts";
+import { ensureSmtpConfig, env, isDemoMode } from "../lib/env.ts";
 
 interface CliOptions {
   to: string;
@@ -78,6 +78,12 @@ async function main(): Promise<void> {
   if (Deno.args.includes("--help")) {
     printUsage();
     return;
+  }
+
+  if (isDemoMode()) {
+    throw new Error(
+      "DEMO_MODE=true: E-Mail-Versand ist deaktiviert, SMTP-Test nicht erlaubt.",
+    );
   }
 
   ensureSmtpConfig();

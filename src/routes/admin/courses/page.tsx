@@ -26,7 +26,7 @@ export const adminCoursesPage = new Hono<AppEnv>().get(
       <div class="space-y-6">
         <section class="hero-surface">
           <span class="section-kicker">Kurse</span>
-          <h1 class="mt-3 text-4xl font-bold">Kursverwaltung</h1>
+          <h1 class="mt-3 text-4xl">Kursverwaltung</h1>
           <p class="text-body mt-3 max-w-3xl text-sm sm:text-base">
             Alle Kurse mit Status, Auslastung und Anmeldungszahlen im Überblick.
           </p>
@@ -71,7 +71,7 @@ export const adminCoursesPage = new Hono<AppEnv>().get(
         <section class="site-card p-5">
           <div class="flex flex-wrap items-center justify-between gap-3">
             <div>
-              <h2 class="text-2xl font-semibold">Alle Kurse</h2>
+              <h2 class="text-2xl">Alle Kurse</h2>
               <p class="text-body-muted mt-1 text-sm">
                 Details, Bearbeitung und Teilnehmerlisten sind pro Kurs
                 verfügbar.
@@ -80,7 +80,7 @@ export const adminCoursesPage = new Hono<AppEnv>().get(
             {canManageCourses
               ? (
                 <a
-                  class="btn-secondary px-3 py-2 text-xs"
+                  class="btn-secondary btn-sm"
                   href="/admin/dashboard"
                 >
                   Neuen Kurs anlegen
@@ -106,7 +106,7 @@ export const adminCoursesPage = new Hono<AppEnv>().get(
                 >
                   <div class="flex flex-wrap items-start justify-between gap-3">
                     <div>
-                      <h3 class="text-xl font-semibold">
+                      <h3 class="text-xl">
                         {summary.course.title}
                       </h3>
                       <p class="text-body-muted mt-1 text-sm">
@@ -129,7 +129,7 @@ export const adminCoursesPage = new Hono<AppEnv>().get(
                       <p class="text-label">
                         Anmeldungen
                       </p>
-                      <p class="metric-value mt-1 text-2xl font-display">
+                      <p class="stat-number mt-1">
                         {summary.registrationCount}
                       </p>
                     </article>
@@ -137,7 +137,7 @@ export const adminCoursesPage = new Hono<AppEnv>().get(
                       <p class="text-label">
                         Zugesagt
                       </p>
-                      <p class="metric-value-success mt-1 text-2xl font-display">
+                      <p class="stat-number stat-number-success mt-1">
                         {summary.attendeeCount}
                       </p>
                     </article>
@@ -145,7 +145,7 @@ export const adminCoursesPage = new Hono<AppEnv>().get(
                       <p class="text-label">
                         Warteliste
                       </p>
-                      <p class="metric-value-warning mt-1 text-2xl font-display">
+                      <p class="stat-number stat-number-warning mt-1">
                         {summary.waitlistedCount}
                       </p>
                     </article>
@@ -153,7 +153,7 @@ export const adminCoursesPage = new Hono<AppEnv>().get(
                       <p class="text-label">
                         Freie Plätze
                       </p>
-                      <p class="metric-value-info mt-1 text-2xl font-display">
+                      <p class="stat-number stat-number-info mt-1">
                         {summary.availableSlots}
                       </p>
                     </article>
@@ -176,7 +176,7 @@ export const adminCoursesPage = new Hono<AppEnv>().get(
                         : "deaktiviert"}
                     </p>
                     <a
-                      class="btn-primary px-3 py-2 text-xs"
+                      class="btn-primary btn-sm"
                       href={`/admin/courses/${summary.course.id}`}
                     >
                       Details und Bearbeitung

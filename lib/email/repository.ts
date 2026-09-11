@@ -226,3 +226,18 @@ export async function markCourseReminderSent(
     true,
   );
 }
+
+export async function insertEmailLogRecords(logs: EmailLog[]): Promise<void> {
+  if (logs.length === 0) return;
+  const kv = await getKv();
+  let tx = kv.atomic();
+  for (const log of logs) {
+    tx = tx
+      .set(["email_logs", log.id], log)
+      .set(
+        ["email_logs_by_registration", log.registrationId, log.sentAt, log.id],
+        log.deliveryStatus,
+      );
+  }
+  await tx.commit();
+}

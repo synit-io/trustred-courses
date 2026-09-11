@@ -94,3 +94,13 @@ export async function listAuditLogsByEntityPaginated(
     pageSize: safePageSize,
   };
 }
+
+export async function insertAuditLogRecords(logs: AuditLog[]): Promise<void> {
+  if (logs.length === 0) return;
+  const kv = await getKv();
+  let tx = kv.atomic();
+  for (const log of logs) {
+    tx = addAuditLogToAtomic(tx, log);
+  }
+  await tx.commit();
+}

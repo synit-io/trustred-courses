@@ -511,6 +511,16 @@ See:
 
 ---
 
+## 🧪 Demo instance
+
+Run a public demo with `DEMO_MODE=true`: outgoing e-mail is hard-disabled,
+payments are simulated, a demo banner is shown and `deno task seed:demo` adds
+realistic sample courses, registrations and history on every run.
+
+See [DEVELOPMENT.md](./docs/DEVELOPMENT.md#demo-mode).
+
+---
+
 ## ☁️ Managed TrustRed
 
 Organizations that do not want to operate the infrastructure themselves can use

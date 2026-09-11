@@ -19,6 +19,7 @@ Important organization values:
 
 ```text
 APP_NAME
+APP_TAGLINE
 APP_BASE_URL
 INITIAL_ADMIN_EMAIL
 LEGAL_*
@@ -117,6 +118,37 @@ Double-opt-in email cannot be delivered without SMTP. Local debug mode exposes a
 development confirmation URL after registration so the confirmation step can
 still be tested.
 
+## Demo mode
+
+A public demo or marketing instance runs with `DEMO_MODE=true`. Demo mode:
+
+- hard-disables all outgoing e-mail; SMTP is never contacted, every mail is
+  logged as `suppressed` in the registration timeline
+- shows a demo banner on every page
+- displays login links and registration confirmation links directly on the page
+  instead of mailing them, so the full flow works without SMTP
+- records paid-course registrations as `demo` payments instead of redirecting to
+  PayPal
+- unlocks `deno task seed:demo`, which appends realistic demo data on every run
+- rejects `deno task smtp:test`
+
+Add demo data as often as needed:
+
+```bash
+DEMO_MODE=true deno task seed:demo --courses=10
+```
+
+Options: `--courses=<n>` (default 8), `--min-registrations=<n>` (default 4),
+`--max-registrations=<n>` (default 28), `--seed=<n>` for a reproducible content
+shape.
+
+Every run creates the demo accounts `demo-admin@example.org` (admin),
+`demo-approver@example.org` and `demo-viewer@example.org` when missing. All
+generated addresses use RFC 2606 reserved domains and can never receive mail.
+
+Never enable `DEMO_MODE` on a production system: anyone who knows an admin
+e-mail address can log in, because login links are shown on the page.
+
 ## Tasks
 
 | Command                  | Purpose                                                    |
@@ -129,6 +161,7 @@ still be tested.
 | `deno task test`         | Run automated tests                                        |
 | `deno task e2e`          | Run Dockerized end-to-end tests                            |
 | `deno task seed`         | Create development users and courses                       |
+| `deno task seed:demo`    | Add realistic demo data, requires `DEMO_MODE=true`         |
 | `deno task smtp:test`    | Diagnose SMTP and optionally send a test email             |
 | `deno task start`        | Build CSS and start direct self-host runtime               |
 | `deno task update`       | Update declared dependencies                               |

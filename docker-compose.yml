@@ -5,6 +5,8 @@ services:
       dockerfile: Dockerfile
     environment:
       APP_NAME: "${APP_NAME:-Aid Org Courses}"
+      APP_TAGLINE: "${APP_TAGLINE:-}"
+      DEMO_MODE: "${DEMO_MODE:-false}"
       APP_BASE_URL: "${APP_BASE_URL:-http://localhost:8000}"
       KV_PATH: "${KV_PATH:-.data/aid-org-courses.kv}"
       INITIAL_ADMIN_EMAIL: "${INITIAL_ADMIN_EMAIL:-admin@example.org}"

@@ -55,7 +55,7 @@ Deno.test("registration emails include branded layout and detailed course facts"
     demoCourse(),
   );
 
-  assertStringIncludes(template.html, "background:#dc2626");
+  assertStringIncludes(template.html, "background:#871d33");
   assertStringIncludes(template.html, "Status: Bestätigt");
   assertStringIncludes(template.html, "Kursdetails");
   assertStringIncludes(template.html, "Anmeldung bis");

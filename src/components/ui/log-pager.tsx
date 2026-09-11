@@ -27,14 +27,14 @@ export function LogPager(
       <div class="flex gap-2">
         <a
           aria-disabled={page.page <= 1}
-          class="btn-secondary inline-block px-3 py-1 disabled:pointer-events-none disabled:opacity-40"
+          class="btn-secondary btn-sm disabled:pointer-events-none disabled:opacity-40"
           href={prevHref}
         >
           Zurück
         </a>
         <a
           aria-disabled={page.page >= pages}
-          class="btn-secondary inline-block px-3 py-1 disabled:pointer-events-none disabled:opacity-40"
+          class="btn-secondary btn-sm disabled:pointer-events-none disabled:opacity-40"
           href={nextHref}
         >
           Weiter

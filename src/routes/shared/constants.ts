@@ -18,6 +18,18 @@ export const registrationStatusLabels: Record<string, string> = {
   submitted: "E-Mail-Bestätigung ausstehend",
 };
 
+export const userRoleLabels: Record<string, string> = {
+  viewer: "Betrachter",
+  editor: "Bearbeiter",
+  approver: "Genehmiger",
+  admin: "Administrator",
+  super_admin: "Super Administrator",
+};
+
+export function toUserRoleLabel(role: string): string {
+  return userRoleLabels[role] ?? role;
+}
+
 export const courseStatusLabels: Record<string, string> = {
   active: "Aktiv",
   draft: "Entwurf",

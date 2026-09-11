@@ -40,6 +40,7 @@ Create `.env` with production values:
 ```dotenv
 NODE_ENV="production"
 APP_NAME="TrustRed Courses"
+APP_TAGLINE="Ausbildung. Termine. Anmeldung."
 APP_BASE_URL="https://courses.example.org"
 INITIAL_ADMIN_EMAIL="admin@example.org"
 KV_PATH=".data/trustred-courses.kv"
@@ -185,6 +186,31 @@ Common causes:
 - PayPal checkout unavailable: set `PAYPAL_ENVIRONMENT`, `PAYPAL_CLIENT_ID`, and
   `PAYPAL_CLIENT_SECRET`
 - iframe blocked: configure `EMBED_ALLOWED_ORIGINS` with allowed origins
+
+## Demo instance
+
+For a public demo, set `DEMO_MODE="true"` in `.env`, start the stack, then add
+demo data. The seed runs in a one-off container against the same `.data` volume
+the web service uses, so new courses show up immediately without a restart:
+
+```bash
+docker compose run --rm web task seed:demo --courses=10
+```
+
+Run it again whenever more data is needed; every run appends. Without Compose:
+
+```bash
+docker run --rm -e DEMO_MODE=true -v "$PWD/.data:/app/.data" synitio/trustred-courses:latest task seed:demo --courses=10
+```
+
+The image ships the seed scripts with all dependencies cached, so the command
+also works without network access. `DEMO_MODE` must be set for both the web
+service and the seed container; the seed refuses to run otherwise.
+
+Demo mode disables all outgoing e-mail, shows a demo banner, exposes login and
+confirmation links on the page and records payments as demo payments. It is not
+suitable for real registrations. See
+[DEVELOPMENT.md](./DEVELOPMENT.md#demo-mode).
 
 ## Security checklist
 

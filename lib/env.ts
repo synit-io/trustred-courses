@@ -31,6 +31,7 @@ function optionalNumber(name: string, fallback: number): number {
 
 export interface EnvConfig {
   appName: string;
+  appTagline: string;
   appBaseUrl: string;
   authCookieName: string;
   authMagicLinkBindingCookieName: string;
@@ -70,6 +71,7 @@ export interface EnvConfig {
 
 export const env: EnvConfig = {
   appName: Deno.env.get("APP_NAME") ?? "Aid Org Courses",
+  appTagline: (Deno.env.get("APP_TAGLINE") ?? "").trim(),
   appBaseUrl: Deno.env.get("APP_BASE_URL") ?? "http://localhost:8000",
   authCookieName: Deno.env.get("AUTH_COOKIE_NAME") ?? "session",
   authMagicLinkBindingCookieName:
@@ -150,6 +152,14 @@ export function isLocalDebugBypassEnabled(): boolean {
   } catch {
     return false;
   }
+}
+
+export function isDemoMode(): boolean {
+  return (Deno.env.get("DEMO_MODE") ?? "").trim().toLowerCase() === "true";
+}
+
+export function isDebugLinkExposureEnabled(): boolean {
+  return isDemoMode() || isLocalDebugBypassEnabled();
 }
 
 export function frameAncestorsDirectiveValue(): string {

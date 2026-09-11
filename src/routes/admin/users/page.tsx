@@ -1,6 +1,7 @@
 import { env } from "@/lib/env.ts";
 import { listUsers, normalizeEmail } from "@/lib/users/repository.ts";
 import type { AppEnv } from "@/src/app/context.ts";
+import { toUserRoleLabel } from "@/src/routes/shared/constants.ts";
 import { Hono } from "hono";
 
 export const adminUsersPage = new Hono<AppEnv>().get("/users", async (c) => {
@@ -26,7 +27,7 @@ export const adminUsersPage = new Hono<AppEnv>().get("/users", async (c) => {
     <div class="space-y-6">
       <section class="hero-panel">
         <span class="page-eyebrow">Benutzerverwaltung</span>
-        <h1 class="text-3xl font-bold">Admin Benutzer</h1>
+        <h1 class="text-3xl">Admin Benutzer</h1>
         <p class="text-body-muted mt-1 text-sm">
           Rollen und Zugriffe für das interne Team verwalten.
         </p>
@@ -55,7 +56,7 @@ export const adminUsersPage = new Hono<AppEnv>().get("/users", async (c) => {
         : null}
 
       <section class="site-card p-5">
-        <h2 class="text-2xl font-semibold">Benutzer per E-Mail hinzufügen</h2>
+        <h2 class="text-2xl">Benutzer per E-Mail hinzufügen</h2>
         <form
           action="/api/admin/users/create"
           method="post"
@@ -84,7 +85,7 @@ export const adminUsersPage = new Hono<AppEnv>().get("/users", async (c) => {
             </select>
           </label>
           <button
-            class="btn-primary sm:col-span-2 px-4 py-2 text-sm"
+            class="btn-primary sm:col-span-2"
             type="submit"
           >
             Benutzer speichern
@@ -93,7 +94,7 @@ export const adminUsersPage = new Hono<AppEnv>().get("/users", async (c) => {
       </section>
 
       <section class="site-card p-5">
-        <h2 class="text-2xl font-semibold">Bestehende Benutzer</h2>
+        <h2 class="text-2xl">Bestehende Benutzer</h2>
         <ul class="mt-3 divide-y divide-slate-200 text-sm">
           {users.map((user) => {
             const isProtectedInitialAdmin =
@@ -121,7 +122,9 @@ export const adminUsersPage = new Hono<AppEnv>().get("/users", async (c) => {
                     : null}
                 </div>
                 <div class="flex items-center gap-2">
-                  <span class="status-badge status-cancelled">{user.role}</span>
+                  <span class="status-badge status-cancelled">
+                    {toUserRoleLabel(user.role)}
+                  </span>
                   {canDelete
                     ? (
                       <form
@@ -129,7 +132,7 @@ export const adminUsersPage = new Hono<AppEnv>().get("/users", async (c) => {
                         method="post"
                       >
                         <button
-                          class="btn-destructive px-3 py-1 text-xs"
+                          class="btn-destructive btn-sm"
                           type="submit"
                         >
                           Admin löschen

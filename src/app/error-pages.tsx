@@ -11,21 +11,21 @@ function renderNotFoundPage(c: Context<AppEnv>) {
         <p class="page-eyebrow">
           Seite nicht gefunden
         </p>
-        <h1 class="mt-2 text-4xl font-bold">404</h1>
+        <h1 class="mt-2 text-4xl">404</h1>
         <p class="text-body mt-3 text-sm">
           Die angeforderte Seite ist nicht verfügbar oder wurde verschoben.
         </p>
       </section>
       <section class="site-card p-6">
-        <h2 class="text-2xl font-semibold">Was Sie jetzt tun können</h2>
+        <h2 class="text-2xl">Was Sie jetzt tun können</h2>
         <ul class="text-body mt-3 list-disc space-y-2 pl-5 text-sm">
           <li>Zur Startseite zurückkehren und einen Kurs auswählen.</li>
           <li>Die URL auf Tippfehler prüfen.</li>
           <li>Bei Fragen die Kontaktadresse im Footer nutzen.</li>
         </ul>
         <div class="mt-5 flex flex-wrap gap-3">
-          <a class="btn-primary px-4 py-2 text-sm" href="/">Zur Startseite</a>
-          <a class="btn-secondary px-4 py-2 text-sm" href="/admin/login">
+          <a class="btn-primary" href="/">Zur Startseite</a>
+          <a class="btn-secondary" href="/admin/login">
             Admin Login
           </a>
         </div>
@@ -42,13 +42,13 @@ function renderInternalErrorPage(c: Context<AppEnv>) {
         <p class="page-eyebrow">
           Serverfehler
         </p>
-        <h1 class="mt-2 text-4xl font-bold">500</h1>
+        <h1 class="mt-2 text-4xl">500</h1>
         <p class="text-body mt-3 text-sm">
           Beim Verarbeiten der Anfrage ist ein unerwarteter Fehler aufgetreten.
         </p>
       </section>
       <section class="site-card p-6">
-        <h2 class="text-2xl font-semibold">Bitte versuchen Sie es erneut</h2>
+        <h2 class="text-2xl">Bitte versuchen Sie es erneut</h2>
         <p class="text-body mt-3 text-sm">
           Falls der Fehler bestehen bleibt, kontaktieren Sie {env.appName} uber
           {" "}
@@ -58,7 +58,7 @@ function renderInternalErrorPage(c: Context<AppEnv>) {
           .
         </p>
         <div class="mt-5">
-          <a class="btn-primary px-4 py-2 text-sm" href="/">Zur Startseite</a>
+          <a class="btn-primary" href="/">Zur Startseite</a>
         </div>
       </section>
     </div>,

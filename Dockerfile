@@ -3,7 +3,7 @@ FROM denoland/deno:2.9.5 AS builder
 WORKDIR /app
 COPY . .
 RUN deno task css
-RUN deno cache main.tsx
+RUN deno cache main.tsx scripts/seed.ts scripts/seed_demo.ts
 RUN deno task build
 
 FROM denoland/deno:2.9.5
@@ -16,6 +16,7 @@ COPY main.tsx ./
 COPY src ./src
 COPY lib ./lib
 COPY assets ./assets
+COPY scripts ./scripts
 COPY --from=builder /app/static ./static
 RUN mkdir -p /app/.data
 

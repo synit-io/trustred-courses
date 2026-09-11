@@ -5,6 +5,7 @@ export interface PublicHomeContent {
     description: string;
     primaryCtaLabel: string;
     primaryCtaHref: string;
+    secondaryCtaLabel: string;
   };
   coursesIntro: {
     kicker: string;
@@ -22,6 +23,7 @@ export const publicHomeContent: PublicHomeContent = {
       "Übersicht über unsere aktuell angebotenen Kurse und Termine. Wählen Sie einen passenden Kurs aus und melden Sie sich direkt online an.",
     primaryCtaLabel: "Kurs finden",
     primaryCtaHref: "#aktive-kurse",
+    secondaryCtaLabel: "Kontakt aufnehmen",
   },
   coursesIntro: {
     kicker: "Kursangebot",

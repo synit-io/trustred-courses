@@ -9,7 +9,7 @@ export const datenschutzPage = new Hono<AppEnv>().get("/", (c) => {
         <p class="page-eyebrow">
           Datenschutz
         </p>
-        <h1 class="mt-2 text-4xl font-bold">Datenschutzerklärung</h1>
+        <h1 class="mt-2 text-4xl">Datenschutzerklärung</h1>
         <p class="text-body mt-3 text-sm">
           Informationen zur Verarbeitung personenbezogener Daten in dieser
           Anwendung.
@@ -17,7 +17,7 @@ export const datenschutzPage = new Hono<AppEnv>().get("/", (c) => {
       </section>
 
       <section class="site-card space-y-3 p-6 text-sm">
-        <h2 class="text-2xl font-semibold">Verantwortliche Stelle</h2>
+        <h2 class="text-2xl">Verantwortliche Stelle</h2>
         <p>{env.legalOrganizationName}</p>
         <p>{env.legalRepresentative}</p>
         <p>{env.legalStreet}</p>
@@ -39,7 +39,7 @@ export const datenschutzPage = new Hono<AppEnv>().get("/", (c) => {
       </section>
 
       <section class="site-card space-y-3 p-6 text-sm">
-        <h2 class="text-2xl font-semibold">Zwecke der Verarbeitung</h2>
+        <h2 class="text-2xl">Zwecke der Verarbeitung</h2>
         <ul class="list-disc space-y-2 pl-5">
           <li>Verwaltung von Kursangeboten und Kursanmeldungen.</li>
           <li>Versand von Bestätigungs- und Status-E-Mails.</li>
@@ -47,7 +47,7 @@ export const datenschutzPage = new Hono<AppEnv>().get("/", (c) => {
       </section>
 
       <section class="site-card space-y-3 p-6 text-sm">
-        <h2 class="text-2xl font-semibold">
+        <h2 class="text-2xl">
           Drittanbieter und externe Inhalte
         </h2>
         <p>
@@ -60,7 +60,7 @@ export const datenschutzPage = new Hono<AppEnv>().get("/", (c) => {
       </section>
 
       <section class="site-card space-y-3 p-6 text-sm">
-        <h2 class="text-2xl font-semibold">Speicherdauer</h2>
+        <h2 class="text-2xl">Speicherdauer</h2>
         <p>
           Registrierungs-, Audit- und Kommunikationsdaten werden für den Betrieb
           und die Nachvollziehbarkeit gespeichert.
@@ -68,7 +68,7 @@ export const datenschutzPage = new Hono<AppEnv>().get("/", (c) => {
       </section>
 
       <section class="site-card space-y-3 p-6 text-sm">
-        <h2 class="text-2xl font-semibold">Ihre Rechte</h2>
+        <h2 class="text-2xl">Ihre Rechte</h2>
         <p>
           Sie haben insbesondere das Recht auf Auskunft, Berichtigung, Löschung,
           Einschränkung der Verarbeitung sowie Datenübertragbarkeit nach den

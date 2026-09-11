@@ -41,7 +41,7 @@ export interface RegistrationInput {
 }
 
 export interface RegistrationPaymentDetails {
-  provider: "paypal";
+  provider: "paypal" | "demo";
   captureId: string;
   amountCents: number;
   currency: string;

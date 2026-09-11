@@ -1,4 +1,4 @@
-import { isLocalDebugBypassEnabled } from "@/lib/env.ts";
+import { isDebugLinkExposureEnabled } from "@/lib/env.ts";
 import {
   capturePayPalOrder,
   getPendingPaidRegistration,
@@ -47,7 +47,7 @@ export const registrationPayPalReturnRoute = new Hono<AppEnv>().get(
         }/api/registrations/confirm?token=${
           encodeURIComponent(pending.confirmationToken)
         }`;
-        const confirmDebug = isLocalDebugBypassEnabled()
+        const confirmDebug = isDebugLinkExposureEnabled()
           ? `&confirm_debug=${encodeURIComponent(confirmationUrl)}`
           : "";
         return c.redirect(
