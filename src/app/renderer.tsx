@@ -1,3 +1,4 @@
+import { getDemoResetInfo } from "@/lib/demo/schedule.ts";
 import { env, isDemoMode } from "@/lib/env.ts";
 import type { SessionUser } from "@/src/app/context.ts";
 
@@ -14,6 +15,7 @@ export function RootDocument(
   const navCount = navItems.length + 1;
   const year = new Date().getFullYear();
   const demoMode = isDemoMode();
+  const resetInfo = getDemoResetInfo();
 
   return (
     <html lang="de-DE">
@@ -45,9 +47,16 @@ export function RootDocument(
             <div class="notice-bar" role="status">
               <div class="mx-auto flex max-w-6xl flex-wrap items-center gap-3 px-4 py-3 text-sm font-semibold">
                 <span class="notice-kicker">Demo</span>
-                <span>
+                <span class="notice-text">
                   Demo-System mit Beispieldaten. E-Mail-Versand und Zahlungen
                   sind deaktiviert.
+                  {resetInfo.enabled
+                    ? ` Alle Daten werden automatisch ${resetInfo.description} zurückgesetzt${
+                      resetInfo.countdown
+                        ? `, nächster Reset ${resetInfo.countdown}`
+                        : ""
+                    }.`
+                    : ""}
                 </span>
               </div>
             </div>
@@ -86,6 +95,20 @@ export function RootDocument(
                     {item.label}
                   </a>
                 ))}
+                {user && resetInfo.enabled
+                  ? (
+                    <span
+                      class="site-nav-note"
+                      title={`Demo-Modus: automatischer Reset ${resetInfo.description}${
+                        resetInfo.nextRunTime
+                          ? `, nächster Reset um ${resetInfo.nextRunTime}`
+                          : ""
+                      }`}
+                    >
+                      Reset {resetInfo.countdown ?? resetInfo.description}
+                    </span>
+                  )
+                  : null}
                 {user
                   ? (
                     <form action="/api/auth/logout" method="post">

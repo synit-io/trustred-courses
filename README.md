@@ -21,6 +21,17 @@ It provides the complete registration workflow in one application:
 
 ---
 
+## 📸 Preview
+
+| Public course offer                                                   | Course detail and registration                                                         | Administration                                                                             |
+| --------------------------------------------------------------------- | -------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------ |
+| [![Startseite](./screenshots/01-home.png)](./screenshots/01-home.png) | [![Anmeldung](./screenshots/03-course-detail.png)](./screenshots/03-course-detail.png) | [![Dashboard](./screenshots/10-admin-dashboard.png)](./screenshots/10-admin-dashboard.png) |
+
+All screens, including mobile views, waiting-list handling, the registration
+timeline and user management, are in [`screenshots/`](./screenshots/README.md).
+
+---
+
 ## Why TrustRed Courses?
 
 Training and qualification are an essential part of fire departments, emergency
@@ -514,8 +525,10 @@ See:
 ## 🧪 Demo instance
 
 Run a public demo with `DEMO_MODE=true`: outgoing e-mail is hard-disabled,
-payments are simulated, a demo banner is shown and `deno task seed:demo` adds
-realistic sample courses, registrations and history on every run.
+payments are simulated, a demo banner is shown, deletions are refused, the demo
+dataset is seeded on first boot and wiped plus re-seeded on a schedule.
+`deno task seed:demo` adds more sample courses, registrations and history at any
+time.
 
 See [DEVELOPMENT.md](./docs/DEVELOPMENT.md#demo-mode).
 

@@ -1,11 +1,17 @@
 import { assert, assertEquals, assertRejects } from "@std/assert";
-import { listCourses } from "../lib/courses/repository.ts";
+import { Hono } from "hono";
+import { listCourses, upsertCourse } from "../lib/courses/repository.ts";
 import { DEMO_ACCOUNTS } from "../lib/demo/accounts.ts";
 import {
   DEMO_COURSE_ID_PREFIX,
   DEMO_EMAIL_DOMAINS,
   generateDemoDataset,
 } from "../lib/demo/generator.ts";
+import {
+  ensureDemoDataOnBoot,
+  getDemoResetState,
+  resetDemoData,
+} from "../lib/demo/reset.ts";
 import { DemoModeDisabledError, seedDemoData } from "../lib/demo/seed.ts";
 import {
   enqueueEmailOutbox,
@@ -17,11 +23,25 @@ import {
   processEmailOutboxBatch,
   sendRegistrationEventEmails,
 } from "../lib/email/service.ts";
-import { isDemoMode } from "../lib/env.ts";
+import {
+  cronIntervalMinutes,
+  describeCronSchedule,
+  formatCountdown,
+  getDemoResetInfo,
+  nextCronRun,
+  parseCronSchedule,
+} from "../lib/demo/schedule.ts";
+import { env, isDemoMode } from "../lib/env.ts";
 import { getPublicHomeSnapshot } from "../lib/public_snapshot/service.ts";
 import { listRegistrationsByCourse } from "../lib/registrations/repository.ts";
 import type { Course, Registration } from "../lib/types.ts";
-import { getUserByEmail } from "../lib/users/repository.ts";
+import {
+  createUserFromEmail,
+  getUserByEmail,
+} from "../lib/users/repository.ts";
+import type { AppEnv } from "../src/app/context.ts";
+import { adminCoursesDeleteRoute } from "../src/routes/api/admin/courses/[id]/delete/route.ts";
+import { adminUsersDeleteRoute } from "../src/routes/api/admin/users/[id]/delete/route.ts";
 import { setupKvTest } from "./test_utils.ts";
 
 function withDemoMode<T>(enabled: boolean, run: () => Promise<T>): Promise<T> {
@@ -282,5 +302,241 @@ Deno.test("seedDemoData appends data on every run and rebuilds snapshots", async
     }
   } finally {
     await cleanup();
+  }
+});
+
+Deno.test("resetDemoData wipes visitor data and rebuilds the demo state", async () => {
+  const { kv, cleanup } = await setupKvTest("demo-reset-");
+  try {
+    await withDemoMode(true, () => seedDemoData({ courses: 3, seed: 5 }));
+    await upsertCourse({ ...sampleCourse(), id: "visitor-course" });
+    await kv.set(["sessions", "visitor-session"], { userId: "x" });
+    const summary = await withDemoMode(
+      true,
+      () => resetDemoData({ courses: 4, seed: 6 }, "manual"),
+    );
+
+    assert(summary.deletedKeys > 0);
+    assertEquals(summary.courses, 4);
+    const courses = await listCourses();
+    assertEquals(courses.length, 4);
+    assert(
+      courses.every((course) => course.id.startsWith(DEMO_COURSE_ID_PREFIX)),
+    );
+    assertEquals((await kv.get(["sessions", "visitor-session"])).value, null);
+    assertEquals((await kv.get(["courses", "visitor-course"])).value, null);
+
+    const state = await getDemoResetState();
+    assert(state);
+    assertEquals(state.trigger, "manual");
+    assertEquals(state.courses, 4);
+    assertEquals((await getPublicHomeSnapshot()).courses.length > 0, true);
+    for (const account of DEMO_ACCOUNTS) {
+      assert(await getUserByEmail(account.email));
+    }
+  } finally {
+    await cleanup();
+  }
+});
+
+Deno.test("resetDemoData refuses to run without DEMO_MODE", async () => {
+  const { cleanup } = await setupKvTest("demo-reset-refuse-");
+  try {
+    await upsertCourse(sampleCourse());
+    await withDemoMode(false, async () => {
+      await assertRejects(() => resetDemoData(), DemoModeDisabledError);
+    });
+    assertEquals((await listCourses()).length, 1);
+  } finally {
+    await cleanup();
+  }
+});
+
+Deno.test("ensureDemoDataOnBoot seeds once and is idempotent", async () => {
+  const { cleanup } = await setupKvTest("demo-boot-");
+  try {
+    assertEquals(
+      await withDemoMode(false, () => ensureDemoDataOnBoot()),
+      "skipped",
+    );
+    assertEquals(
+      await withDemoMode(true, () => ensureDemoDataOnBoot()),
+      "seeded",
+    );
+    const count = (await listCourses()).length;
+    assert(count > 0);
+    assertEquals(
+      await withDemoMode(true, () => ensureDemoDataOnBoot()),
+      "present",
+    );
+    assertEquals((await listCourses()).length, count);
+  } finally {
+    await cleanup();
+  }
+});
+
+function adminApp() {
+  const app = new Hono<AppEnv>();
+  app.use("*", async (c, next) => {
+    c.set("sessionUser", {
+      id: "admin-1",
+      email: "admin@example.org",
+      role: "super_admin",
+    });
+    await next();
+  });
+  return app;
+}
+
+Deno.test("DEMO_MODE blocks course deletion server-side", async () => {
+  const { cleanup } = await setupKvTest("demo-guard-course-");
+  try {
+    await upsertCourse(sampleCourse());
+    const app = adminApp();
+    app.route("/", adminCoursesDeleteRoute);
+    const response = await withDemoMode(
+      true,
+      async () =>
+        await app.request("/course-demo-test/delete", { method: "POST" }),
+    );
+    assertEquals(response.status, 303);
+    const location = response.headers.get("location") ?? "";
+    assert(location.includes("course_error="));
+    assert(decodeURIComponent(location).includes("Demo-Modus"));
+    assertEquals((await listCourses()).length, 1);
+
+    const allowed = await withDemoMode(
+      false,
+      async () =>
+        await app.request("/course-demo-test/delete", { method: "POST" }),
+    );
+    assertEquals(
+      allowed.headers.get("location"),
+      "/admin/courses?course_deleted=1",
+    );
+    assertEquals((await listCourses()).length, 0);
+  } finally {
+    await cleanup();
+  }
+});
+
+Deno.test("DEMO_MODE blocks user deletion server-side", async () => {
+  const { cleanup } = await setupKvTest("demo-guard-user-");
+  try {
+    const target = await createUserFromEmail(
+      "other-admin@example.org",
+      "admin",
+    );
+    const app = adminApp();
+    app.route("/", adminUsersDeleteRoute);
+    const response = await withDemoMode(
+      true,
+      async () => await app.request(`/${target.id}/delete`, { method: "POST" }),
+    );
+    assertEquals(response.status, 303);
+    assertEquals(
+      response.headers.get("location"),
+      "/admin/users?error=demo_mode",
+    );
+    assert(await getUserByEmail("other-admin@example.org"));
+  } finally {
+    await cleanup();
+  }
+});
+
+Deno.test("cron schedule parser describes and predicts resets", () => {
+  const now = new Date("2026-09-11T20:07:30.000Z");
+
+  const every30 = parseCronSchedule("*/30 * * * *");
+  assert(every30);
+  assertEquals(describeCronSchedule(every30), "alle 30 Minuten");
+  assertEquals(cronIntervalMinutes(every30), 30);
+  assertEquals(
+    nextCronRun(every30, now)?.toISOString(),
+    "2026-09-11T20:30:00.000Z",
+  );
+
+  const hourly = parseCronSchedule("0 * * * *");
+  assert(hourly);
+  assertEquals(describeCronSchedule(hourly), "jede volle Stunde");
+  assertEquals(cronIntervalMinutes(hourly), 60);
+  assertEquals(
+    nextCronRun(hourly, now)?.toISOString(),
+    "2026-09-11T21:00:00.000Z",
+  );
+
+  const every6h = parseCronSchedule("0 */6 * * *");
+  assert(every6h);
+  assertEquals(describeCronSchedule(every6h), "alle 6 Stunden");
+  assertEquals(cronIntervalMinutes(every6h), 360);
+  assertEquals(
+    nextCronRun(every6h, now)?.toISOString(),
+    "2026-09-12T00:00:00.000Z",
+  );
+
+  const daily = parseCronSchedule("0 3 * * *");
+  assert(daily);
+  assertEquals(describeCronSchedule(daily), "täglich um 03:00 Uhr (UTC)");
+  assertEquals(cronIntervalMinutes(daily), 1440);
+  assertEquals(
+    nextCronRun(daily, now)?.toISOString(),
+    "2026-09-12T03:00:00.000Z",
+  );
+
+  const weekly = parseCronSchedule("30 8 * * 1");
+  assert(weekly);
+  assertEquals(describeCronSchedule(weekly), "Montag um 08:30 Uhr (UTC)");
+  assertEquals(
+    nextCronRun(weekly, now)?.toISOString(),
+    "2026-09-14T08:30:00.000Z",
+  );
+
+  assertEquals(parseCronSchedule("*/30 * * *"), null);
+  assertEquals(parseCronSchedule("61 * * * *"), null);
+  assertEquals(parseCronSchedule("abc"), null);
+
+  assertEquals(
+    formatCountdown(new Date("2026-09-11T20:30:00.000Z"), now),
+    "in 22 Minuten",
+  );
+  assertEquals(
+    formatCountdown(new Date("2026-09-11T22:08:00.000Z"), now),
+    "in 2 Stunden",
+  );
+  assertEquals(
+    formatCountdown(new Date("2026-09-13T21:08:00.000Z"), now),
+    "in 2 Tagen 1 Stunde",
+  );
+  assertEquals(
+    formatCountdown(new Date("2026-09-11T20:08:00.000Z"), now),
+    "in unter einer Minute",
+  );
+});
+
+Deno.test("getDemoResetInfo reflects DEMO_MODE and the configured cron", async () => {
+  const previousCron = env.demoModeResetCron;
+  try {
+    (env as { demoModeResetCron: string }).demoModeResetCron = "*/15 * * * *";
+    const enabled = await withDemoMode(
+      true,
+      () => Promise.resolve(getDemoResetInfo()),
+    );
+    assertEquals(enabled.enabled, true);
+    assertEquals(enabled.description, "alle 15 Minuten");
+    assertEquals(enabled.intervalMinutes, 15);
+    assert(enabled.countdown?.startsWith("in "));
+    const disabled = await withDemoMode(
+      false,
+      () => Promise.resolve(getDemoResetInfo()),
+    );
+    assertEquals(disabled.enabled, false);
+    (env as { demoModeResetCron: string }).demoModeResetCron = "off";
+    const off = await withDemoMode(
+      true,
+      () => Promise.resolve(getDemoResetInfo()),
+    );
+    assertEquals(off.enabled, false);
+  } finally {
+    (env as { demoModeResetCron: string }).demoModeResetCron = previousCron;
   }
 });

@@ -32,6 +32,8 @@ function optionalNumber(name: string, fallback: number): number {
 export interface EnvConfig {
   appName: string;
   appTagline: string;
+  demoModeResetCron: string;
+  demoModeResetCourses: number;
   appBaseUrl: string;
   authCookieName: string;
   authMagicLinkBindingCookieName: string;
@@ -72,6 +74,12 @@ export interface EnvConfig {
 export const env: EnvConfig = {
   appName: Deno.env.get("APP_NAME") ?? "Aid Org Courses",
   appTagline: (Deno.env.get("APP_TAGLINE") ?? "").trim(),
+  demoModeResetCron: (Deno.env.get("DEMO_MODE_RESET_CRON") ?? "0 * * * *")
+    .trim(),
+  demoModeResetCourses: Math.max(
+    1,
+    optionalNumber("DEMO_MODE_RESET_COURSES", 10),
+  ),
   appBaseUrl: Deno.env.get("APP_BASE_URL") ?? "http://localhost:8000",
   authCookieName: Deno.env.get("AUTH_COOKIE_NAME") ?? "session",
   authMagicLinkBindingCookieName:
@@ -156,6 +164,12 @@ export function isLocalDebugBypassEnabled(): boolean {
 
 export function isDemoMode(): boolean {
   return (Deno.env.get("DEMO_MODE") ?? "").trim().toLowerCase() === "true";
+}
+
+export function isDemoResetEnabled(): boolean {
+  const schedule = env.demoModeResetCron.toLowerCase();
+  return isDemoMode() && schedule !== "" && schedule !== "off" &&
+    schedule !== "false" && schedule !== "0";
 }
 
 export function isDebugLinkExposureEnabled(): boolean {

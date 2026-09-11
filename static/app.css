@@ -405,6 +405,9 @@
   :where(.divide-slate-200 > :not(:last-child)) {
     border-color: var(--color-slate-200);
   }
+  .self-center {
+    align-self: center;
+  }
   .truncate {
     overflow: hidden;
     text-overflow: ellipsis;
@@ -707,6 +710,10 @@ html.embedded .main-shell, body.embedded .main-shell {
   letter-spacing: 0.18em;
   text-transform: uppercase;
 }
+.notice-text {
+  flex: 1 1 20rem;
+  min-width: 0;
+}
 .notice-kicker::before {
   content: "";
   width: 0.5rem;
@@ -820,6 +827,30 @@ html.embedded .main-shell, body.embedded .main-shell {
   display: inline-flex;
   align-items: center;
   justify-content: center;
+}
+.site-nav-note {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.4rem;
+  min-height: 2.25rem;
+  border: 1px solid var(--color-status-warning-border);
+  border-radius: 999px;
+  background: var(--color-status-warning-bg);
+  color: var(--color-status-warning-fg);
+  padding: 0.3rem 0.8rem;
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+.site-nav-note::before {
+  content: "";
+  width: 0.45rem;
+  height: 0.45rem;
+  border-radius: 999px;
+  background: var(--color-status-warning-fg);
 }
 .page-hero, .hero-surface, .hero-panel {
   position: relative;
@@ -1267,7 +1298,7 @@ input[type="checkbox"] {
   .site-nav[data-nav-count="4"][data-open="true"] .site-nav-panel {
     display: flex;
   }
-  .site-nav[data-nav-count="4"] .site-nav-link, .site-nav[data-nav-count="4"] .site-nav-button, .site-nav[data-nav-count="4"] form {
+  .site-nav[data-nav-count="4"] .site-nav-link, .site-nav[data-nav-count="4"] .site-nav-button, .site-nav[data-nav-count="4"] .site-nav-note, .site-nav[data-nav-count="4"] form {
     width: 100%;
   }
 }
@@ -1294,7 +1325,7 @@ input[type="checkbox"] {
   .site-nav[data-open="true"] .site-nav-panel {
     display: flex;
   }
-  .site-nav .site-nav-link, .site-nav .site-nav-button, .site-nav form {
+  .site-nav .site-nav-link, .site-nav .site-nav-button, .site-nav .site-nav-note, .site-nav form {
     width: 100%;
   }
 }

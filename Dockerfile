@@ -3,7 +3,7 @@ FROM denoland/deno:2.9.5 AS builder
 WORKDIR /app
 COPY . .
 RUN deno task css
-RUN deno cache main.tsx scripts/seed.ts scripts/seed_demo.ts
+RUN deno cache main.tsx scripts/seed.ts scripts/seed_demo.ts scripts/demo_reset.ts
 RUN deno task build
 
 FROM denoland/deno:2.9.5

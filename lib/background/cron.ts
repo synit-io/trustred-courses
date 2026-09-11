@@ -1,4 +1,7 @@
 import { getKv } from "../kv/client.ts";
+import { resetDemoData } from "../demo/reset.ts";
+import { parseCronSchedule } from "../demo/schedule.ts";
+import { env, isDemoResetEnabled } from "../env.ts";
 import {
   processCourseReminders,
   processEmailOutboxBatch,
@@ -65,4 +68,31 @@ export function registerCronJobs(): void {
       console.error("[cron] course-reminders failed", error);
     }
   });
+
+  if (isDemoResetEnabled()) {
+    if (!parseCronSchedule(env.demoModeResetCron)) {
+      console.error(
+        `[cron] invalid DEMO_MODE_RESET_CRON "${env.demoModeResetCron}", automatic demo reset disabled`,
+      );
+      return;
+    }
+    try {
+      Deno.cron("demo-reset", env.demoModeResetCron, async () => {
+        try {
+          const summary = await resetDemoData({}, "cron");
+          console.log(
+            `[cron] demo reset: ${summary.deletedKeys} keys wiped, ${summary.courses} courses, ${summary.registrations} registrations`,
+          );
+        } catch (error) {
+          console.error("[cron] demo-reset failed", error);
+        }
+      });
+      console.log(`[cron] demo reset scheduled: ${env.demoModeResetCron}`);
+    } catch (error) {
+      console.error(
+        `[cron] invalid DEMO_MODE_RESET_CRON "${env.demoModeResetCron}"`,
+        error,
+      );
+    }
+  }
 }

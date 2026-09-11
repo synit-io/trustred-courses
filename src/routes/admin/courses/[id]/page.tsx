@@ -1,4 +1,8 @@
 import { hasRole } from "@/lib/auth/roles.ts";
+import {
+  DEMO_DELETE_BLOCKED_MESSAGE,
+  demoModeBlocksDeletion,
+} from "@/lib/demo/guards.ts";
 import { getCourseSummaryById } from "@/lib/admin/course_summaries.ts";
 import type { AppEnv } from "@/src/app/context.ts";
 import {
@@ -365,17 +369,25 @@ export const adminCourseDetailPage = new Hono<AppEnv>().get(
                     Schliessen
                   </button>
                 </form>
-                <form
-                  action={`/api/admin/courses/${course.id}/delete`}
-                  method="post"
-                >
-                  <button
-                    class="btn-destructive btn-sm"
-                    type="submit"
-                  >
-                    Löschen
-                  </button>
-                </form>
+                {demoModeBlocksDeletion()
+                  ? (
+                    <span class="text-meta self-center text-xs">
+                      {DEMO_DELETE_BLOCKED_MESSAGE}
+                    </span>
+                  )
+                  : (
+                    <form
+                      action={`/api/admin/courses/${course.id}/delete`}
+                      method="post"
+                    >
+                      <button
+                        class="btn-destructive btn-sm"
+                        type="submit"
+                      >
+                        Löschen
+                      </button>
+                    </form>
+                  )}
               </div>
             </section>
           )

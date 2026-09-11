@@ -1,4 +1,5 @@
 import { registerCronJobs } from "@/lib/background/cron.ts";
+import { ensureDemoDataOnBoot } from "@/lib/demo/reset.ts";
 import { env } from "@/lib/env.ts";
 import { ensureInitialAdminUserBootstrappedOnce } from "@/lib/users/repository.ts";
 import { logger } from "@/lib/observability/logger.ts";
@@ -24,6 +25,15 @@ try {
     error,
   });
   throw error;
+}
+
+try {
+  const demoBootstrap = await ensureDemoDataOnBoot();
+  if (demoBootstrap !== "skipped") {
+    logger.info("bootstrap.demo_data", { result: demoBootstrap });
+  }
+} catch (error) {
+  logger.error("bootstrap.demo_data_failed", { error });
 }
 
 registerCronJobs();

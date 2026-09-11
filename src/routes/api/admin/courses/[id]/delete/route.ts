@@ -1,4 +1,8 @@
 import { hasRole } from "@/lib/auth/roles.ts";
+import {
+  DEMO_DELETE_BLOCKED_MESSAGE,
+  demoModeBlocksDeletion,
+} from "@/lib/demo/guards.ts";
 import { appendAuditLog } from "@/lib/audit/repository.ts";
 import { deleteCourseById, getCourseById } from "@/lib/courses/repository.ts";
 import { rebuildPublicSnapshotsForCourse } from "@/lib/public_snapshot/service.ts";
@@ -13,6 +17,14 @@ export const adminCoursesDeleteRoute = new Hono<AppEnv>().post(
     const sessionUser = c.get("sessionUser");
     if (!sessionUser || !hasRole(sessionUser.role, "admin")) {
       return c.text("Forbidden", 403);
+    }
+    if (demoModeBlocksDeletion()) {
+      return c.redirect(
+        `/admin/courses/${c.req.param("id")}?course_error=${
+          encodeURIComponent(DEMO_DELETE_BLOCKED_MESSAGE)
+        }`,
+        303,
+      );
     }
 
     const existing = await getCourseById(c.req.param("id"));

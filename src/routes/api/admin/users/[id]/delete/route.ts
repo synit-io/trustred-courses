@@ -1,4 +1,5 @@
 import { hasRole } from "@/lib/auth/roles.ts";
+import { demoModeBlocksDeletion } from "@/lib/demo/guards.ts";
 import { appendAuditLog } from "@/lib/audit/repository.ts";
 import {
   deleteUserById,
@@ -15,6 +16,9 @@ export const adminUsersDeleteRoute = new Hono<AppEnv>().post(
     const sessionUser = c.get("sessionUser");
     if (!sessionUser || !hasRole(sessionUser.role, "admin")) {
       return c.text("Forbidden", 403);
+    }
+    if (demoModeBlocksDeletion()) {
+      return c.redirect("/admin/users?error=demo_mode", 303);
     }
 
     const targetUser = await getUserById(c.req.param("id"));

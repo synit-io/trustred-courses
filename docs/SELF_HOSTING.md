@@ -207,6 +207,17 @@ The image ships the seed scripts with all dependencies cached, so the command
 also works without network access. `DEMO_MODE` must be set for both the web
 service and the seed container; the seed refuses to run otherwise.
 
+A demo instance protects itself for open-world use: on first boot it seeds the
+demo dataset automatically, deleting courses or users is refused, and on
+`DEMO_MODE_RESET_CRON` (default every full hour, e.g. `*/30 * * * *` for every
+30 minutes) the web container wipes all data and re-seeds. Visitors see the
+interval and a countdown to the next reset in the banner and admin navigation.
+Trigger a reset manually with:
+
+```bash
+docker compose run --rm web task demo:reset
+```
+
 Demo mode disables all outgoing e-mail, shows a demo banner, exposes login and
 confirmation links on the page and records payments as demo payments. It is not
 suitable for real registrations. See

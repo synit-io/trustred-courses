@@ -131,6 +131,13 @@ A public demo or marketing instance runs with `DEMO_MODE=true`. Demo mode:
   PayPal
 - unlocks `deno task seed:demo`, which appends realistic demo data on every run
 - rejects `deno task smtp:test`
+- refuses to delete courses or users (server-side, UI hides the buttons)
+- seeds the demo dataset on first boot when the store holds no demo course
+- wipes ALL data and re-seeds on `DEMO_MODE_RESET_CRON` (5-field cron, UTC;
+  default `0 * * * *` = every full hour; set `off` to disable);
+  `DEMO_MODE_RESET_COURSES` sets the dataset size
+- shows the reset interval and a countdown to the next reset in the top banner,
+  as a chip in the admin navigation and on the dashboard
 
 Add demo data as often as needed:
 
@@ -142,6 +149,12 @@ Options: `--courses=<n>` (default 8), `--min-registrations=<n>` (default 4),
 `--max-registrations=<n>` (default 28), `--seed=<n>` for a reproducible content
 shape.
 
+Reset by hand (wipes everything, logs everyone out, re-seeds):
+
+```bash
+DEMO_MODE=true deno task demo:reset
+```
+
 Every run creates the demo accounts `demo-admin@example.org` (admin),
 `demo-approver@example.org` and `demo-viewer@example.org` when missing. All
 generated addresses use RFC 2606 reserved domains and can never receive mail.
@@ -149,22 +162,47 @@ generated addresses use RFC 2606 reserved domains and can never receive mail.
 Never enable `DEMO_MODE` on a production system: anyone who knows an admin
 e-mail address can log in, because login links are shown on the page.
 
+## Screenshots
+
+`screenshots/` holds a preview of every screen plus an index with captions. It
+is generated, not hand-made. To refresh it, start a demo instance and run the
+capture script against it:
+
+```bash
+KV_PATH=/tmp/shots.kv DEMO_MODE=true DEMO_MODE_RESET_CRON=off \
+  APP_NAME="TrustRed Courses" APP_TAGLINE="Ausbildung. Termine. Anmeldung." \
+  deno run -A --unstable-kv --unstable-cron entrypoints/local.ts
+```
+
+```bash
+deno task screenshots --base-url=http://localhost:8000
+```
+
+The script drives a headless Chromium: it uses `SCREENSHOT_BROWSER` when set, a
+locally installed Chrome or a cached Playwright Chromium, and otherwise lets
+`@astral/astral` download Chromium into its cache once. Screenshots are taken at
+2x device pixel ratio (1440 px desktop, 390 px mobile). The demo banner is
+hidden by default; pass `--keep-demo-banner` to keep it, `--only=03,10` to
+refresh single files.
+
 ## Tasks
 
-| Command                  | Purpose                                                    |
-| ------------------------ | ---------------------------------------------------------- |
-| `deno task css`          | Build `static/app.css` with Tailwind CSS                   |
-| `deno task dev`          | Build CSS and start watch-mode development                 |
-| `deno task dev:clean`    | Remove local dependency/CSS caches and restart development |
-| `deno task check`        | Check formatting, lint, and types                          |
-| `deno task docker:build` | Build local `trustred-courses:latest` image                |
-| `deno task test`         | Run automated tests                                        |
-| `deno task e2e`          | Run Dockerized end-to-end tests                            |
-| `deno task seed`         | Create development users and courses                       |
-| `deno task seed:demo`    | Add realistic demo data, requires `DEMO_MODE=true`         |
-| `deno task smtp:test`    | Diagnose SMTP and optionally send a test email             |
-| `deno task start`        | Build CSS and start direct self-host runtime               |
-| `deno task update`       | Update declared dependencies                               |
+| Command                  | Purpose                                                               |
+| ------------------------ | --------------------------------------------------------------------- |
+| `deno task css`          | Build `static/app.css` with Tailwind CSS                              |
+| `deno task dev`          | Build CSS and start watch-mode development                            |
+| `deno task dev:clean`    | Remove local dependency/CSS caches and restart development            |
+| `deno task check`        | Check formatting, lint, and types                                     |
+| `deno task docker:build` | Build local `trustred-courses:latest` image                           |
+| `deno task test`         | Run automated tests                                                   |
+| `deno task e2e`          | Run Dockerized end-to-end tests                                       |
+| `deno task seed`         | Create development users and courses                                  |
+| `deno task seed:demo`    | Add realistic demo data, requires `DEMO_MODE=true`                    |
+| `deno task demo:reset`   | Wipe all data and re-seed the demo dataset, requires `DEMO_MODE=true` |
+| `deno task screenshots`  | Capture README/social-media screenshots from a running demo instance  |
+| `deno task smtp:test`    | Diagnose SMTP and optionally send a test email                        |
+| `deno task start`        | Build CSS and start direct self-host runtime                          |
+| `deno task update`       | Update declared dependencies                                          |
 
 ## Verification
 

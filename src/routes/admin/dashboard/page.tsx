@@ -3,6 +3,8 @@ import {
   type RegistrationDashboardFilters,
 } from "@/lib/admin/registration_rows.ts";
 import { hasRole } from "@/lib/auth/roles.ts";
+import { getDemoResetState } from "@/lib/demo/reset.ts";
+import { getDemoResetInfo } from "@/lib/demo/schedule.ts";
 import type { RegistrationStatus } from "@/lib/types.ts";
 import type { AppEnv } from "@/src/app/context.ts";
 import {
@@ -36,9 +38,33 @@ export const adminDashboardPage = new Hono<AppEnv>().get(
     const canManageCourses = sessionUser
       ? hasRole(sessionUser.role, "admin")
       : false;
+    const resetInfo = getDemoResetInfo();
+    const resetState = resetInfo.enabled ? await getDemoResetState() : null;
 
     return c.render(
       <div class="space-y-7">
+        {resetInfo.enabled
+          ? (
+            <p class="callout-warning">
+              <strong>Demo-Modus:</strong> Alle Daten werden automatisch{" "}
+              {resetInfo.description} zurückgesetzt.
+              {resetInfo.countdown
+                ? ` Nächster Reset ${resetInfo.countdown}${
+                  resetInfo.nextRunTime ? ` (${resetInfo.nextRunTime})` : ""
+                }.`
+                : ""}
+              {resetState
+                ? ` Letzter Reset: ${
+                  new Date(resetState.resetAt).toLocaleString("de-DE", {
+                    dateStyle: "medium",
+                    timeStyle: "short",
+                    timeZone: "Europe/Berlin",
+                  })
+                } Uhr.`
+                : ""} Löschen von Kursen und Benutzern ist deaktiviert.
+            </p>
+          )
+          : null}
         <section class="hero-surface">
           <span class="section-kicker">Kursverwaltung</span>
           <div class="mt-3 grid gap-4 lg:grid-cols-[1.2fr_0.8fr]">

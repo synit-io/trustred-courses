@@ -1,3 +1,7 @@
+import {
+  DEMO_DELETE_BLOCKED_MESSAGE,
+  demoModeBlocksDeletion,
+} from "@/lib/demo/guards.ts";
 import { env } from "@/lib/env.ts";
 import { listUsers, normalizeEmail } from "@/lib/users/repository.ts";
 import type { AppEnv } from "@/src/app/context.ts";
@@ -11,7 +15,10 @@ export const adminUsersPage = new Hono<AppEnv>().get("/users", async (c) => {
   const deleted = c.req.query("deleted") === "1";
   const error = c.req.query("error");
   const protectedEmail = normalizeEmail(env.initialAdminEmail);
-  const errorMessage = error === "protected_initial_admin"
+  const deletionBlocked = demoModeBlocksDeletion();
+  const errorMessage = error === "demo_mode"
+    ? DEMO_DELETE_BLOCKED_MESSAGE
+    : error === "protected_initial_admin"
     ? "Der initiale Administrator ist geschützt und kann nicht gelöscht werden."
     : error === "cannot_delete_self"
     ? "Du kannst deinen eigenen Benutzer nicht löschen."
@@ -95,11 +102,18 @@ export const adminUsersPage = new Hono<AppEnv>().get("/users", async (c) => {
 
       <section class="site-card p-5">
         <h2 class="text-2xl">Bestehende Benutzer</h2>
+        {deletionBlocked
+          ? (
+            <p class="callout-muted mt-3">
+              {DEMO_DELETE_BLOCKED_MESSAGE}
+            </p>
+          )
+          : null}
         <ul class="mt-3 divide-y divide-slate-200 text-sm">
           {users.map((user) => {
             const isProtectedInitialAdmin =
               user.emailNormalized === protectedEmail;
-            const canDelete = Boolean(sessionUser) &&
+            const canDelete = !deletionBlocked && Boolean(sessionUser) &&
               (user.role === "admin" || user.role === "super_admin") &&
               (user.role !== "super_admin" ||
                 sessionUser?.role === "super_admin") &&
