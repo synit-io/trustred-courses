@@ -22,10 +22,10 @@
     "jsr:@std/io@0.225.0": "0.225.0",
     "jsr:@std/path@1": "1.1.6",
     "jsr:@std/path@^1.0.8": "1.1.6",
-    "jsr:@synitio/kv-magic-link-auth@~0.2.1": "0.2.1",
+    "jsr:@synitio/kv-magic-link-auth@0.3": "0.3.0",
     "jsr:@zip-js/zip-js@^2.7.52": "2.14.0",
     "npm:@tailwindcss/cli@4.3.3": "4.3.3",
-    "npm:nodemailer@10.0.0": "10.0.0",
+    "npm:nodemailer@10.0.9": "10.0.9",
     "npm:tailwindcss@4.3.3": "4.3.3"
   },
   "jsr": {
@@ -103,8 +103,8 @@
         "jsr:@std/internal@^1.0.14"
       ]
     },
-    "@synitio/kv-magic-link-auth@0.2.1": {
-      "integrity": "a65d5176575ebe034c14885e554b4bf6dd6b70cda81ef458bd48e9e255508bde"
+    "@synitio/kv-magic-link-auth@0.3.0": {
+      "integrity": "90aac4277bfa06c27b34e2e1e7ecee13fd04c9bebb8d292ab639bcc30986fe36"
     },
     "@zip-js/zip-js@2.14.0": {
       "integrity": "a69c56f3ff5b78c7046fd44f1e7775914feef0dbf010d0ee7dddff2a3444627a"
@@ -467,8 +467,8 @@
     "node-addon-api@7.1.1": {
       "integrity": "sha512-5m3bsyrjFWE1xf7nz7YXdN4udnVtXK6/Yfgn5qnahL6bCkf2yKt4k3nuTKAtT4r3IG8JNR2ncsIMdZuAzJjHQQ=="
     },
-    "nodemailer@10.0.0": {
-      "integrity": "sha512-wdv+hXBg0iIPIOf108FaZyTxqjQpCvQeAJt9pHHTooPy/y3vQtI9eiImM9AIVKR3e/0FeMA1oueNfBjFJcaK+Q=="
+    "nodemailer@10.0.9": {
+      "integrity": "sha512-BF0qcyplCwp+jMk6HCjFykBz/YhhZSsxrARhOldLwFWH+8kGjQsd2WIMIZhqEuyXRoGFi0ONbDeWDMDoL8MhLw=="
     },
     "picocolors@1.1.1": {
       "integrity": "sha512-xceH2snhtb5M9liqDsmEw56le376mTZkEX/jEb/RxNFyegNul7eNslCXP9FDj/Lcu0X8KEyMceP2ntpaHrDEVA=="
@@ -496,8 +496,8 @@
     "dependencies": [
       "jsr:@hono/hono@^4.13.7",
       "jsr:@std/assert@^1.0.19",
-      "jsr:@synitio/kv-magic-link-auth@~0.2.1",
-      "npm:nodemailer@10.0.0",
+      "jsr:@synitio/kv-magic-link-auth@0.3",
+      "npm:nodemailer@10.0.9",
       "npm:tailwindcss@4.3.3"
     ]
   }
