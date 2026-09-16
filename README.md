@@ -17,7 +17,9 @@ It provides the complete registration workflow in one application:
 
 [🌐 TrustRed by synit.io](https://www.synit.io/products/trustred) ·
 [🐳 Docker Hub](https://hub.docker.com/r/synitio/trustred-courses) ·
-[📖 Documentation](./docs/README.md) · [⚖️ License](./LICENSE.md)
+[📖 Documentation](./docs/README.md) ·
+[⚖️ License](./LICENSE.md) ·
+[👥 Discord Community](https://www.synit.io/discord)
 
 ---
 
