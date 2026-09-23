@@ -6,7 +6,7 @@
     "jsr:@deno-library/progress@^1.5.1": "1.5.1",
     "jsr:@deno/cache-dir@0.22.2": "0.22.2",
     "jsr:@deno/graph@0.86": "0.86.9",
-    "jsr:@hono/hono@^4.13.7": "4.13.7",
+    "jsr:@hono/hono@^4.13.8": "4.13.8",
     "jsr:@std/assert@^1.0.19": "1.0.19",
     "jsr:@std/async@1": "1.5.0",
     "jsr:@std/bytes@^1.0.2": "1.0.6",
@@ -25,7 +25,7 @@
     "jsr:@synitio/kv-magic-link-auth@0.3": "0.3.0",
     "jsr:@zip-js/zip-js@^2.7.52": "2.14.0",
     "npm:@tailwindcss/cli@4.3.3": "4.3.3",
-    "npm:nodemailer@10.0.9": "10.0.9",
+    "npm:nodemailer@10.0.10": "10.0.10",
     "npm:tailwindcss@4.3.3": "4.3.3"
   },
   "jsr": {
@@ -61,8 +61,8 @@
     "@deno/graph@0.86.9": {
       "integrity": "c4f353a695bcc5246c099602977dabc6534eacea9999a35a8cb24e807192e6a1"
     },
-    "@hono/hono@4.13.7": {
-      "integrity": "90f83307462b2dd47c9a8028cf5e4827abedc74a53fd291a49130f1579fdcd79"
+    "@hono/hono@4.13.8": {
+      "integrity": "bbb566d9ebb81e74c0d7eeff1f9221ba9f3fda6f1832e5ca66cbddcecb2f7fec"
     },
     "@std/assert@1.0.19": {
       "integrity": "eaada96ee120cb980bc47e040f82814d786fe8162ecc53c91d8df60b8755991e",
@@ -467,8 +467,8 @@
     "node-addon-api@7.1.1": {
       "integrity": "sha512-5m3bsyrjFWE1xf7nz7YXdN4udnVtXK6/Yfgn5qnahL6bCkf2yKt4k3nuTKAtT4r3IG8JNR2ncsIMdZuAzJjHQQ=="
     },
-    "nodemailer@10.0.9": {
-      "integrity": "sha512-BF0qcyplCwp+jMk6HCjFykBz/YhhZSsxrARhOldLwFWH+8kGjQsd2WIMIZhqEuyXRoGFi0ONbDeWDMDoL8MhLw=="
+    "nodemailer@10.0.10": {
+      "integrity": "sha512-He9XskOFms62SyAKkLu8CcGcYHAo+BSHSsORI8s4PJH8qZgZY4L4lDfvyN0twvmbpyG+eGrxpyBlskj9d9rJ8A=="
     },
     "picocolors@1.1.1": {
       "integrity": "sha512-xceH2snhtb5M9liqDsmEw56le376mTZkEX/jEb/RxNFyegNul7eNslCXP9FDj/Lcu0X8KEyMceP2ntpaHrDEVA=="
@@ -494,10 +494,10 @@
   },
   "workspace": {
     "dependencies": [
-      "jsr:@hono/hono@^4.13.7",
+      "jsr:@hono/hono@^4.13.8",
       "jsr:@std/assert@^1.0.19",
       "jsr:@synitio/kv-magic-link-auth@0.3",
-      "npm:nodemailer@10.0.9",
+      "npm:nodemailer@10.0.10",
       "npm:tailwindcss@4.3.3"
     ]
   }
