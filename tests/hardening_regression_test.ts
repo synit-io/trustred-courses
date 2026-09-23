@@ -203,6 +203,23 @@ Deno.test("concurrent snapshot updates preserve both courses", async () => {
   }
 });
 
+Deno.test("home snapshot order does not depend on update order", async () => {
+  const { cleanup } = await setupKvTest("snapshot-order-");
+  try {
+    await upsertCourse(courseFixture("snapshot-a", 5));
+    await upsertCourse(courseFixture("snapshot-b", 5));
+    await rebuildPublicSnapshotsForCourse("snapshot-b");
+    await rebuildPublicSnapshotsForCourse("snapshot-a");
+    const home = await getPublicHomeSnapshot();
+    assertEquals(home.courses.map((course) => course.id), [
+      "snapshot-a",
+      "snapshot-b",
+    ]);
+  } finally {
+    await cleanup();
+  }
+});
+
 Deno.test("registration query does not truncate after 500 records", async () => {
   const { cleanup } = await setupKvTest("registration-query-");
   try {

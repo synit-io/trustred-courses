@@ -186,7 +186,10 @@ async function buildCourseDetailSnapshot(
 function sortHomeCourses(
   courses: PublicCourseCardSnapshot[],
 ): PublicCourseCardSnapshot[] {
-  return [...courses].sort((a, b) => a.startsAt.localeCompare(b.startsAt));
+  // Tie-break on id so equal start times keep one order, whichever update ran last.
+  return [...courses].sort((a, b) =>
+    a.startsAt.localeCompare(b.startsAt) || a.id.localeCompare(b.id)
+  );
 }
 
 async function ensureHomeSnapshot(kv: Deno.Kv): Promise<PublicHomeSnapshot> {
@@ -301,10 +304,10 @@ export async function rebuildPublicHomeSnapshot(): Promise<PublicHomeSnapshot> {
 
   const homeSnapshot: PublicHomeSnapshot = {
     generatedAt,
-    courses: detailSnapshots.map((detail) => ({
+    courses: sortHomeCourses(detailSnapshots.map((detail) => ({
       ...detail.course,
       seats: detail.seats,
-    })).sort((a, b) => a.startsAt.localeCompare(b.startsAt)),
+    }))),
   };
 
   const tx = kv.atomic()
