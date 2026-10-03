@@ -101,7 +101,7 @@ Deno.test("e2e magic-link auth sends email via Mailpit and grants admin session"
       method: "POST",
       headers: {
         "content-type": "application/x-www-form-urlencoded",
-        "x-forwarded-for": "198.51.100.24",
+        origin: new URL(APP_BASE_URL).origin,
         "user-agent": "trustred-e2e/1.0",
       },
       body: requestBody.toString(),
@@ -127,7 +127,6 @@ Deno.test("e2e magic-link auth sends email via Mailpit and grants admin session"
   const verifyResponse = await fetch(verificationUrl, {
     headers: {
       cookie: bindingCookie,
-      "x-forwarded-for": "198.51.100.24",
       "user-agent": "trustred-e2e/1.0",
     },
     redirect: "manual",
@@ -135,6 +134,8 @@ Deno.test("e2e magic-link auth sends email via Mailpit and grants admin session"
 
   assertEquals(verifyResponse.status, 303);
   assertEquals(verifyResponse.headers.get("location"), "/admin/dashboard");
+  assertEquals(verifyResponse.headers.get("referrer-policy"), "no-referrer");
+  assertEquals(verifyResponse.headers.get("cache-control"), "no-store");
 
   const sessionCookie = extractCookieValue(
     verifyResponse.headers.get("set-cookie"),

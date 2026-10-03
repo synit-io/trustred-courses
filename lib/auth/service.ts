@@ -213,6 +213,10 @@ export async function revokeSession(sessionId: string): Promise<void> {
   await (await getAuth()).revokeSession(sessionId);
 }
 
+export async function sessionCookieMaxAgeSeconds(): Promise<number> {
+  return (await getAuth()).sessionCookieMaxAgeSeconds();
+}
+
 export function __resetAuthForTests(): void {
   authPromise = null;
 }

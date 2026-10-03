@@ -1,3 +1,4 @@
+import type { Context } from "hono";
 import type { AuditLogPage } from "@/lib/audit/repository.ts";
 import {
   allowedEmailEventsForRegistrationStatus,
@@ -93,6 +94,23 @@ export function extractRequestIp(headers: Headers): string | null {
   if (!value) return null;
   const first = value.split(",")[0]?.trim();
   return first || null;
+}
+
+type ConnectionEnv = {
+  remoteAddr?: {
+    hostname?: string;
+  };
+};
+
+/** Trusted proxy header when configured; otherwise the Deno connection peer.
+ * kv-magic-link-auth 0.4.0 rejects a missing address. */
+export function resolveAuthClientIp(c: Context): string | null {
+  if (env.trustedClientIpHeader) {
+    return extractRequestIp(c.req.raw.headers);
+  }
+  const hostname = (c.env as ConnectionEnv | undefined)?.remoteAddr?.hostname
+    ?.trim() ?? "";
+  return hostname || null;
 }
 
 export function capacityView(total: number, approved: number): {

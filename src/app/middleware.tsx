@@ -57,7 +57,8 @@ export function registerGlobalMiddleware(app: Hono<AppEnv>) {
     const method = c.req.method.toUpperCase();
     const protectedMutation = !["GET", "HEAD", "OPTIONS"].includes(method) &&
       (c.req.path.startsWith("/api/admin/") ||
-        c.req.path === "/api/auth/logout");
+        c.req.path === "/api/auth/logout" ||
+        c.req.path === "/api/auth/magic-link/request");
     if (!protectedMutation) return await next();
 
     const origin = c.req.raw.headers.get("origin");
@@ -76,7 +77,9 @@ export function registerGlobalMiddleware(app: Hono<AppEnv>) {
   app.use("*", async (c, next) => {
     await next();
     c.header("X-Content-Type-Options", "nosniff");
-    c.header("Referrer-Policy", "strict-origin-when-cross-origin");
+    if (c.req.path !== "/api/auth/magic-link/verify") {
+      c.header("Referrer-Policy", "strict-origin-when-cross-origin");
+    }
     c.header("Permissions-Policy", "geolocation=(), microphone=(), camera=()");
     const frameAncestors = frameAncestorsDirectiveValue();
     c.header(

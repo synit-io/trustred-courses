@@ -6,7 +6,8 @@
     "jsr:@deno-library/progress@^1.5.1": "1.5.1",
     "jsr:@deno/cache-dir@0.22.2": "0.22.2",
     "jsr:@deno/graph@0.86": "0.86.9",
-    "jsr:@hono/hono@^4.13.9": "4.13.9",
+    "jsr:@hono/hono@4.13.12": "4.13.12",
+    "jsr:@hono/hono@^4.13.12": "4.13.12",
     "jsr:@std/assert@^1.0.19": "1.0.19",
     "jsr:@std/async@1": "1.5.0",
     "jsr:@std/bytes@^1.0.2": "1.0.6",
@@ -22,10 +23,11 @@
     "jsr:@std/io@0.225.0": "0.225.0",
     "jsr:@std/path@1": "1.1.6",
     "jsr:@std/path@^1.0.8": "1.1.6",
-    "jsr:@synitio/kv-magic-link-auth@0.3": "0.3.0",
+    "jsr:@synitio/kv-magic-link-auth@0.3.0": "0.3.0",
+    "jsr:@synitio/kv-magic-link-auth@0.4.0": "0.4.0",
     "jsr:@zip-js/zip-js@^2.7.52": "2.14.0",
     "npm:@tailwindcss/cli@4.3.3": "4.3.3",
-    "npm:nodemailer@10.0.10": "10.0.10",
+    "npm:nodemailer@10.0.13": "10.0.13",
     "npm:tailwindcss@4.3.3": "4.3.3"
   },
   "jsr": {
@@ -61,8 +63,8 @@
     "@deno/graph@0.86.9": {
       "integrity": "c4f353a695bcc5246c099602977dabc6534eacea9999a35a8cb24e807192e6a1"
     },
-    "@hono/hono@4.13.9": {
-      "integrity": "74c83a71556490dc3752c3b308b6c85befd9dcdd37ed903a873142a29e5a67f4"
+    "@hono/hono@4.13.12": {
+      "integrity": "ed4bff8999f8d472866e47ad29ff879388f7f401b2d6e2e656ff3083afc13a13"
     },
     "@std/assert@1.0.19": {
       "integrity": "eaada96ee120cb980bc47e040f82814d786fe8162ecc53c91d8df60b8755991e",
@@ -105,6 +107,9 @@
     },
     "@synitio/kv-magic-link-auth@0.3.0": {
       "integrity": "90aac4277bfa06c27b34e2e1e7ecee13fd04c9bebb8d292ab639bcc30986fe36"
+    },
+    "@synitio/kv-magic-link-auth@0.4.0": {
+      "integrity": "5e7f9fe60494f34e4b39cb71d974e7840e11627e05fd3c87de3e0c0d9ef1ded9"
     },
     "@zip-js/zip-js@2.14.0": {
       "integrity": "a69c56f3ff5b78c7046fd44f1e7775914feef0dbf010d0ee7dddff2a3444627a"
@@ -467,8 +472,8 @@
     "node-addon-api@7.1.1": {
       "integrity": "sha512-5m3bsyrjFWE1xf7nz7YXdN4udnVtXK6/Yfgn5qnahL6bCkf2yKt4k3nuTKAtT4r3IG8JNR2ncsIMdZuAzJjHQQ=="
     },
-    "nodemailer@10.0.10": {
-      "integrity": "sha512-He9XskOFms62SyAKkLu8CcGcYHAo+BSHSsORI8s4PJH8qZgZY4L4lDfvyN0twvmbpyG+eGrxpyBlskj9d9rJ8A=="
+    "nodemailer@10.0.13": {
+      "integrity": "sha512-SzG86OlvcW/NNhUFC6uROMwRTL4n7MswfQqC/T8mhkmnY1YVa23zUEMYi4ijSeXSl9GLz9ZeTJDUatEDuY5FeQ=="
     },
     "picocolors@1.1.1": {
       "integrity": "sha512-xceH2snhtb5M9liqDsmEw56le376mTZkEX/jEb/RxNFyegNul7eNslCXP9FDj/Lcu0X8KEyMceP2ntpaHrDEVA=="
@@ -494,10 +499,10 @@
   },
   "workspace": {
     "dependencies": [
-      "jsr:@hono/hono@^4.13.9",
+      "jsr:@hono/hono@^4.13.12",
       "jsr:@std/assert@^1.0.19",
-      "jsr:@synitio/kv-magic-link-auth@0.3",
-      "npm:nodemailer@10.0.10",
+      "jsr:@synitio/kv-magic-link-auth@0.4.0",
+      "npm:nodemailer@10.0.13",
       "npm:tailwindcss@4.3.3"
     ]
   }

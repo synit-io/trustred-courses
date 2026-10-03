@@ -3,6 +3,7 @@ import {
   buildBindingSetCookie,
   buildSessionClearCookie as buildSessionClearCookieBase,
   buildSessionSetCookie as buildSessionSetCookieBase,
+  buildVerifyResponseHeaders,
   getCookie,
 } from "@synitio/kv-magic-link-auth";
 import { env } from "../env.ts";
@@ -12,14 +13,26 @@ function cookieConfig() {
     sessionCookieName: env.authCookieName,
     bindingCookieName: env.authMagicLinkBindingCookieName,
     secure: env.authCookieSecure,
-    sessionAbsoluteTtlDays: env.sessionAbsoluteTtlDays,
   };
 }
 
 export { getCookie };
 
-export function buildSessionSetCookie(sessionId: string): string {
-  return buildSessionSetCookieBase(sessionId, cookieConfig());
+export function buildSessionSetCookie(
+  sessionId: string,
+  maxAgeSeconds: number,
+): string {
+  return buildSessionSetCookieBase(sessionId, {
+    ...cookieConfig(),
+    maxAgeSeconds,
+  });
+}
+
+export function buildMagicLinkVerifyHeaders(
+  location: string,
+  cookies: readonly string[],
+): Headers {
+  return buildVerifyResponseHeaders(location, cookies);
 }
 
 export function buildSessionClearCookie(): string {

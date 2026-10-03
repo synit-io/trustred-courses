@@ -6,7 +6,7 @@ import {
   logger,
 } from "@/lib/observability/logger.ts";
 import type { AppEnv } from "@/src/app/context.ts";
-import { extractRequestIp, maskEmail } from "@/src/routes/shared/helpers.ts";
+import { maskEmail, resolveAuthClientIp } from "@/src/routes/shared/helpers.ts";
 import { enforceRateLimit } from "@/lib/security/rate_limit.ts";
 import { Hono } from "hono";
 import { bodyLimit } from "hono/body-limit";
@@ -35,7 +35,13 @@ magicLinkRequestRoute.post("/", async (c) => {
     email.trim().length <= 254
   ) {
     const normalizedEmail = email.trim().toLowerCase();
-    const requestIp = extractRequestIp(c.req.raw.headers);
+    const requestIp = resolveAuthClientIp(c);
+    if (!requestIp) {
+      logger.warn("auth.magic_link.missing_request_ip", {
+        ...trace,
+        email: maskEmail(normalizedEmail),
+      });
+    }
     const emailLimit = await enforceRateLimit(
       "magic_link:email",
       normalizedEmail,
@@ -73,7 +79,9 @@ magicLinkRequestRoute.post("/", async (c) => {
     logger.info("auth.magic_link.issued", {
       ...trace,
       email: maskEmail(normalizedEmail),
+      issued: result.issued,
       sent: result.sent,
+      error: result.error,
       hasDebugUrl: Boolean(result.debugUrl),
     });
     if (result.debugUrl) {
