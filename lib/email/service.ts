@@ -1,20 +1,30 @@
 import { env, isDemoMode } from "../env.ts";
 import { listActiveCourses } from "../courses/repository.ts";
+import { getCourseById } from "../courses/repository.ts";
+import { appDateKey } from "../time.ts";
+import { getKv } from "../kv/client.ts";
+import { parseMailbox } from "./mailbox.ts";
 import { logger } from "../observability/logger.ts";
 import type {
   Course,
   EmailLog,
   EmailOutboxJob,
   Registration,
+  RegistrationDoubleOptInToken,
 } from "../types.ts";
-import { listRegistrationsByCourse } from "../registrations/repository.ts";
+import {
+  getRegistrationById,
+  listRegistrationsByCourse,
+} from "../registrations/repository.ts";
 import {
   appendEmailLog,
   claimDueEmailOutbox,
+  deadLetterClaimedEmailOutbox,
   deleteClaimedEmailOutbox,
   enqueueEmailOutbox,
   enqueueEmailOutboxOnce,
   markCourseReminderSent,
+  renewClaimedEmailOutbox,
   updateClaimedEmailOutbox,
 } from "./repository.ts";
 import {
@@ -68,6 +78,9 @@ async function defaultSendMail(
     host: env.smtpHost,
     port: env.smtpPort,
     secure: env.smtpSecure,
+    connectionTimeout: 30_000,
+    greetingTimeout: 30_000,
+    socketTimeout: 60_000,
     auth: {
       user: env.smtpUser,
       pass: env.smtpPass,
@@ -104,6 +117,8 @@ async function dispatchEmail(
   text: string,
   html: string,
 ): Promise<SendMailResult> {
+  const mailbox = parseMailbox(recipient);
+  if (!mailbox) return { ok: false, error: "invalid_mailbox" };
   if (isDemoMode()) {
     logger.info("email.suppressed_demo_mode", {
       recipient: maskEmail(recipient),
@@ -111,7 +126,14 @@ async function dispatchEmail(
     });
     return { ok: true, suppressed: true };
   }
-  return await emailSender(recipient, subject, text, html);
+  try {
+    return await emailSender(mailbox, subject, text, html);
+  } catch (error) {
+    return {
+      ok: false,
+      error: error instanceof Error ? error.message : "send_failed",
+    };
+  }
 }
 
 function deliveryStatusFor(
@@ -235,6 +257,7 @@ export function createDoubleOptInOutboxJob(
   registration: Registration,
   course: Course,
   confirmationUrl: string,
+  confirmationTokenHash?: string,
 ): EmailOutboxJob {
   const template = renderRegistrationDoubleOptInTemplate(
     registration,
@@ -257,7 +280,49 @@ export function createDoubleOptInOutboxJob(
     eventKey: `registration_doi:${registration.id}`,
     leaseOwner: null,
     leaseExpiresAt: null,
+    confirmationTokenHash,
   };
+}
+
+/** Persist these jobs in the same transaction as the confirmed registration. */
+export function createRegistrationConfirmationOutboxJobs(
+  registration: Registration,
+  course: Course,
+): EmailOutboxJob[] {
+  const jobs = [createRegistrationEventOutboxJob(
+    registration,
+    course,
+    "registration_received",
+    `registration_confirmed:${registration.id}:receipt`,
+  )];
+  if (registration.status !== "pending_review") {
+    jobs.push(createRegistrationEventOutboxJob(
+      registration,
+      course,
+      toRegistrationEvent(registration.status),
+      `registration_confirmed:${registration.id}:status`,
+    ));
+  }
+  if (env.mailAdminNotificationTo) {
+    const text = [
+      `Neue Anmeldung für ${course.title}`,
+      `Name: ${registration.firstName} ${registration.lastName}`,
+      `E-Mail: ${registration.email}`,
+      `Status: ${registration.status}`,
+    ].join("\n");
+    jobs.push({
+      ...jobs[0],
+      id: crypto.randomUUID(),
+      templateKey: "admin_new_registration",
+      recipientEmail: env.mailAdminNotificationTo,
+      subject:
+        `Neue Anmeldung: ${registration.firstName} ${registration.lastName}`,
+      text,
+      html: renderAdminNotificationHtml(text),
+      eventKey: `registration_confirmed:${registration.id}:admin`,
+    });
+  }
+  return jobs;
 }
 
 export async function sendRegistrationEventEmails(
@@ -422,24 +487,105 @@ export async function sendCourseBroadcastEmails(
   return recipients.length;
 }
 
-function berlinDateKey(value: Date): string {
-  return new Intl.DateTimeFormat("de-DE", {
-    timeZone: "Europe/Berlin",
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-  }).format(value);
-}
-
 function shouldSendReminder(course: Course, now: Date): boolean {
   if (!course.reminderDaysBefore || course.reminderDaysBefore < 1) return false;
   const startsAt = new Date(course.startsAt);
   if (Number.isNaN(startsAt.getTime())) return false;
 
-  const reminderDate = new Date(
-    startsAt.getTime() - course.reminderDaysBefore * 24 * 60 * 60 * 1000,
+  if (startsAt.getTime() <= now.getTime()) return false;
+  const dayDifference = (Date.parse(`${appDateKey(startsAt)}T00:00:00Z`) -
+    Date.parse(`${appDateKey(now)}T00:00:00Z`)) / (24 * 60 * 60 * 1000);
+  return dayDifference === course.reminderDaysBefore;
+}
+
+function reminderEventKey(registration: Registration, course: Course): string {
+  return [
+    "course_reminder",
+    course.id,
+    course.startsAt,
+    course.reminderDaysBefore,
+    registration.id,
+  ].join(":");
+}
+
+async function prepareReminderForDispatch(
+  job: EmailOutboxJob,
+  now: Date,
+): Promise<EmailOutboxJob | null> {
+  const registration = await getRegistrationById(job.registrationId);
+  if (!registration || registration.status !== "approved") return null;
+  const course = await getCourseById(registration.courseId);
+  if (
+    !course || course.status !== "active" || !course.reminderDaysBefore ||
+    Date.parse(course.startsAt) <= now.getTime() ||
+    job.eventKey !== reminderEventKey(registration, course) ||
+    (job.reminder && (job.reminder.courseId !== course.id ||
+      job.reminder.startsAt !== course.startsAt ||
+      job.reminder.daysBefore !== course.reminderDaysBefore))
+  ) return null;
+  const template = renderCourseBroadcastTemplate(
+    "course_reminder",
+    registration,
+    course,
   );
-  return berlinDateKey(reminderDate) === berlinDateKey(now);
+  return { ...job, ...template, recipientEmail: registration.email };
+}
+
+async function confirmationTokenHashForJob(
+  job: EmailOutboxJob,
+): Promise<string | null> {
+  if (job.confirmationTokenHash) return job.confirmationTokenHash;
+  // Existing durable jobs predate token provenance. Recover it from the plain
+  // text action URL, then validate against authoritative token state below.
+  for (const match of job.text.matchAll(/https?:\/\/[^\s<>"']+/g)) {
+    try {
+      const url = new URL(match[0]);
+      if (
+        url.origin !== new URL(env.appBaseUrl).origin ||
+        url.pathname !== "/api/registrations/confirm"
+      ) continue;
+      const token = url.searchParams.get("token");
+      if (!token) continue;
+      const digest = await crypto.subtle.digest(
+        "SHA-256",
+        new TextEncoder().encode(token),
+      );
+      return Array.from(
+        new Uint8Array(digest),
+        (byte) => byte.toString(16).padStart(2, "0"),
+      ).join("");
+    } catch {
+      /* An unsupported legacy URL cannot be delivered as a usable link. */
+    }
+  }
+  return null;
+}
+
+async function isConfirmationStillCurrent(
+  job: EmailOutboxJob,
+  now: Date,
+): Promise<boolean> {
+  const hash = await confirmationTokenHashForJob(job);
+  if (!hash) return false;
+  const kv = await getKv();
+  const [registration, current, token] = await kv.getMany<
+    [Registration, string, RegistrationDoubleOptInToken]
+  >([
+    ["registrations", job.registrationId],
+    ["registration_optin_current", job.registrationId],
+    ["registration_optin_tokens", hash],
+  ]);
+  return Boolean(
+    registration.value && token.value &&
+      registration.value.status === "submitted" &&
+      !registration.value.doubleOptInConfirmedAt &&
+      (!current.value || current.value === hash) &&
+      token.value.registrationId === registration.value.id &&
+      token.value.courseId === registration.value.courseId &&
+      token.value.emailNormalized === parseMailbox(registration.value.email) &&
+      parseMailbox(job.recipientEmail) === token.value.emailNormalized &&
+      !token.value.usedAt && Date.parse(token.value.expiresAt) > now.getTime(),
+  );
 }
 
 export async function processCourseReminders(
@@ -462,13 +608,7 @@ export async function processCourseReminders(
         registration,
         course,
       );
-      const eventKey = [
-        "course_reminder",
-        course.id,
-        course.startsAt,
-        course.reminderDaysBefore,
-        registration.id,
-      ].join(":");
+      const eventKey = reminderEventKey(registration, course);
       const job = await enqueueEmailOutboxOnce(eventKey, {
         registrationId: registration.id,
         templateKey: "course_reminder",
@@ -481,6 +621,11 @@ export async function processCourseReminders(
         lastError: null,
         leaseOwner: null,
         leaseExpiresAt: null,
+        reminder: {
+          courseId: course.id,
+          startsAt: course.startsAt,
+          daysBefore: course.reminderDaysBefore!,
+        },
       });
       if (job) {
         await markCourseReminderSent(
@@ -502,10 +647,52 @@ export async function processEmailOutboxBatch(
   limit = 20,
   now = new Date(),
 ): Promise<number> {
-  const dueJobs = await claimDueEmailOutbox(limit, now);
+  const startedAt = Date.now();
+  const currentNow = () => new Date(now.getTime() + Date.now() - startedAt);
+  const visitedIds = new Set<string>();
   let processed = 0;
 
-  for (const job of dueJobs.slice(0, limit)) {
+  for (let index = 0; index < limit; index++) {
+    // Only claim the next job when ready. A slow SMTP call must not leave a
+    // stale in-memory batch that can later dispatch another owner's jobs.
+    const [claimed] = await claimDueEmailOutbox(1, currentNow(), visitedIds);
+    if (!claimed) break;
+    visitedIds.add(claimed.id);
+    let job = claimed;
+    if (
+      job.templateKey === "double_opt_in_confirmation" &&
+      !await isConfirmationStillCurrent(job, currentNow())
+    ) {
+      if (!await deleteClaimedEmailOutbox(job)) break;
+      logger.info("email.confirmation_obsolete", {
+        jobId: job.id,
+        registrationId: job.registrationId,
+      });
+      processed++;
+      continue;
+    }
+    if (job.templateKey === "course_reminder") {
+      const eligible = await prepareReminderForDispatch(job, currentNow());
+      if (!eligible) {
+        if (!await deleteClaimedEmailOutbox(job)) break;
+        logger.info("email.reminder_obsolete", {
+          jobId: job.id,
+          registrationId: job.registrationId,
+        });
+        processed++;
+        continue;
+      }
+      job = eligible;
+    }
+    const renewed = await renewClaimedEmailOutbox(job, currentNow());
+    if (!renewed) break;
+    job = {
+      ...renewed,
+      recipientEmail: job.recipientEmail,
+      subject: job.subject,
+      text: job.text,
+      html: job.html,
+    };
     const result = await dispatchEmail(
       job.recipientEmail,
       job.subject,
@@ -526,6 +713,7 @@ export async function processEmailOutboxBatch(
     });
 
     const failedAttempt = job.attempt + 1;
+    let ownershipRetained: boolean;
     if (result.ok) {
       logger.info("email.outbox_delivered", {
         jobId: job.id,
@@ -533,7 +721,7 @@ export async function processEmailOutboxBatch(
         templateKey: job.templateKey,
         attempt: failedAttempt,
       });
-      await deleteClaimedEmailOutbox(job);
+      ownershipRetained = await deleteClaimedEmailOutbox(job);
     } else if (failedAttempt >= EMAIL_OUTBOX_MAX_ATTEMPTS) {
       logger.error("email.outbox_permanent_failure", {
         jobId: job.id,
@@ -542,7 +730,11 @@ export async function processEmailOutboxBatch(
         attempt: failedAttempt,
         error: "delivery_failed",
       });
-      await deleteClaimedEmailOutbox(job);
+      ownershipRetained = await deadLetterClaimedEmailOutbox({
+        ...job,
+        attempt: failedAttempt,
+        lastError: result.error ?? "unknown",
+      });
     } else {
       logger.warn("email.outbox_retry_scheduled", {
         jobId: job.id,
@@ -551,7 +743,7 @@ export async function processEmailOutboxBatch(
         attempt: failedAttempt,
         error: "delivery_failed",
       });
-      await updateClaimedEmailOutbox({
+      ownershipRetained = await updateClaimedEmailOutbox({
         ...job,
         attempt: failedAttempt,
         nextAttemptAt: nextRetryAt(failedAttempt),
@@ -560,6 +752,7 @@ export async function processEmailOutboxBatch(
     }
 
     processed += 1;
+    if (!ownershipRetained) break;
   }
 
   return processed;

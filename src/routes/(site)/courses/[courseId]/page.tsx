@@ -1,4 +1,6 @@
 import { isDemoMode } from "@/lib/env.ts";
+import { validatedDebugLink } from "@/lib/auth/debug_links.ts";
+import { formatAppDateTime } from "@/lib/time.ts";
 import { Input } from "@/src/components/ui/forms.tsx";
 import { getPublicCourseDetailSnapshot } from "@/lib/public_snapshot/service.ts";
 import type { AppEnv } from "@/src/app/context.ts";
@@ -10,7 +12,7 @@ import {
 import { Hono } from "hono";
 
 function formatDateTime(value: string): string {
-  return new Date(value).toLocaleString("de-DE", {
+  return formatAppDateTime(value, {
     dateStyle: "medium",
     timeStyle: "short",
   });
@@ -34,12 +36,17 @@ export const courseDetailsPage = new Hono<AppEnv>().get(
 
     const success = c.req.query("success") === "1";
     const doiSent = c.req.query("doi_sent") === "1";
+    const doiResent = c.req.query("doi_resent") === "1";
     const confirmed = c.req.query("confirmed") === "1";
     const confirmError = c.req.query("confirm_error") === "1";
     const paymentSuccess = c.req.query("payment_success") === "1";
     const paymentCancelled = c.req.query("payment_cancelled") === "1";
+    const paymentPending = c.req.query("payment_pending") === "1";
     const status = c.req.query("status") ?? "pending_review";
-    const confirmDebug = c.req.query("confirm_debug");
+    const confirmDebug = validatedDebugLink(
+      c.req.query("confirm_debug"),
+      "/api/registrations/confirm",
+    );
     const courseError = c.req.query("course_error");
 
     return c.render(
@@ -226,10 +233,12 @@ export const courseDetailsPage = new Hono<AppEnv>().get(
               )
               : null}
 
-            {doiSent
+            {doiSent || doiResent
               ? (
                 <p class="callout-info mt-4">
-                  {paymentSuccess
+                  {doiResent
+                    ? "Wenn eine unbestätigte Anmeldung mit dieser E-Mail-Adresse besteht, wurde ein neuer Bestätigungslink angefordert."
+                    : paymentSuccess
                     ? "Zahlung erfolgreich. Bitte bestätige jetzt deine E-Mail-Adresse über den Bestätigungslink."
                     : "Bitte bestätige zuerst deine E-Mail-Adresse über den Bestätigungslink."}
                   {confirmDebug
@@ -255,12 +264,21 @@ export const courseDetailsPage = new Hono<AppEnv>().get(
                 </p>
               )
               : null}
+            {paymentPending
+              ? (
+                <p class="callout-info mt-4">
+                  PayPal verarbeitet deine Zahlung noch. Sobald sie bestätigt
+                  wurde, erhältst du den Bestätigungslink per E-Mail. Bitte
+                  starte keine weitere Zahlung für dieselbe Anmeldung.
+                </p>
+              )
+              : null}
 
             {confirmError
               ? (
                 <p class="callout-danger mt-4">
                   Der Bestätigungslink ist ungültig oder abgelaufen. Bitte
-                  registriere dich erneut.
+                  fordere unten einen neuen Bestätigungslink an.
                 </p>
               )
               : null}
@@ -280,6 +298,33 @@ export const courseDetailsPage = new Hono<AppEnv>().get(
                 </p>
               )
               : null}
+
+            <form
+              class="mt-5 space-y-3"
+              action="/api/registrations/resend-confirmation"
+              method="post"
+            >
+              <input type="hidden" name="courseId" value={course.id} />
+              <p class="text-body-muted text-sm">
+                Bereits angemeldet? Einen abgelaufenen oder fehlenden
+                Bestätigungslink kannst du erneut anfordern.
+              </p>
+              <label class="block text-sm" htmlFor="resend-email">
+                <span class="mb-1 block font-semibold">
+                  E-Mail für Bestätigungslink
+                </span>
+                <input
+                  class="input-field"
+                  id="resend-email"
+                  name="email"
+                  type="email"
+                  required
+                />
+              </label>
+              <button class="btn-secondary" type="submit">
+                Bestätigungslink erneut anfordern
+              </button>
+            </form>
 
             {regWindow.open && (!seats.full || course.waitingListEnabled)
               ? (

@@ -81,7 +81,11 @@ Deno.test("course summaries aggregate registrations and seats", async () => {
     assertEquals(summaries[0]?.waitlistedCount, 1);
     assertEquals(summaries[0]?.availableSlots, 8);
     assertEquals(summaries[0]?.paidRegistrationCount, 2);
-    assertEquals(summaries[0]?.totalRevenueCents, 9980);
+    assertEquals(summaries[0]?.revenueByCurrency, [{
+      currency: "EUR",
+      totalRevenueCents: 9980,
+      paidRegistrationCount: 2,
+    }]);
   } finally {
     await ctx.cleanup();
   }

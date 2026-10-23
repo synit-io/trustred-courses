@@ -15,6 +15,7 @@ import { adminRegistrationDetailPage } from "@/src/routes/admin/registrations/[i
 
 import { healthRoute } from "@/src/routes/api/health/route.ts";
 import { registrationCreateRoute } from "@/src/routes/api/registrations/create/route.ts";
+import { registrationResendConfirmationRoute } from "@/src/routes/api/registrations/resend-confirmation/route.ts";
 import { registrationConfirmRoute } from "@/src/routes/api/registrations/confirm/route.ts";
 import { registrationPayPalReturnRoute } from "@/src/routes/api/registrations/paypal/return/route.ts";
 import { registrationPayPalCancelRoute } from "@/src/routes/api/registrations/paypal/cancel/route.ts";
@@ -47,6 +48,10 @@ export function registerRoutes(app: Hono<AppEnv>) {
   app.route("/api/health", healthRoute);
   app.route("/api/registrations/create", registrationCreateRoute);
   app.route("/api/registrations/confirm", registrationConfirmRoute);
+  app.route(
+    "/api/registrations/resend-confirmation",
+    registrationResendConfirmationRoute,
+  );
   app.route("/api/registrations/paypal", registrationPayPalReturnRoute);
   app.route("/api/registrations/paypal", registrationPayPalCancelRoute);
   app.route("/api/auth/magic-link/request", magicLinkRequestRoute);

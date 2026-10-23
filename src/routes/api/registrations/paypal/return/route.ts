@@ -1,17 +1,13 @@
 import { isDebugLinkExposureEnabled } from "@/lib/env.ts";
-import {
-  capturePayPalOrder,
-  getPendingPaidRegistration,
-  updatePendingPaidRegistration,
-} from "@/lib/payments/paypal.ts";
+import { getPendingPaidRegistration } from "@/lib/payments/paypal.ts";
 import { enforcePayPalRateLimit } from "@/lib/payments/rate_limit.ts";
 import {
   extractRequestTraceContext,
   logger,
 } from "@/lib/observability/logger.ts";
-import { submitRegistrationWithDoubleOptIn } from "@/lib/registrations/service.ts";
+import { reconcilePendingPaidRegistration } from "@/lib/payments/service.ts";
 import type { AppEnv } from "@/src/app/context.ts";
-import { extractRequestIp } from "@/src/routes/shared/helpers.ts";
+import { resolveClientIp } from "@/src/routes/shared/helpers.ts";
 import { Hono } from "hono";
 
 export const registrationPayPalReturnRoute = new Hono<AppEnv>().get(
@@ -23,9 +19,13 @@ export const registrationPayPalReturnRoute = new Hono<AppEnv>().get(
     if (!state || !orderId) {
       return c.redirect("/?course_error=Ungültige+PayPal+Rückgabe", 303);
     }
+    const requestIp = resolveClientIp(c);
+    if (!requestIp) {
+      return c.redirect("/?course_error=Anfrageadresse+nicht+verfügbar", 303);
+    }
     const rateLimit = await enforcePayPalRateLimit(
       "callback",
-      extractRequestIp(c.req.raw.headers),
+      requestIp,
     );
     if (!rateLimit.allowed) {
       c.header("Retry-After", String(rateLimit.retryAfterSeconds));
@@ -55,85 +55,35 @@ export const registrationPayPalReturnRoute = new Hono<AppEnv>().get(
           303,
         );
       };
-      if (pending.status === "finalized") return successRedirect();
-      if (
-        pending.status !== "captured" &&
-        Date.parse(pending.expiresAt) <= Date.now()
-      ) {
-        throw new Error("Zahlungssitzung ist abgelaufen.");
-      }
       if (pending.paypalOrderId !== orderId) {
         throw new Error(
           "PayPal-Bestellung stimmt nicht mit der Anmeldung überein.",
         );
       }
-
-      const capture = pending.capture ?? await capturePayPalOrder(
-        orderId,
-        `capture-${pending.id}`,
-      );
-      if (capture.status !== "COMPLETED") {
-        throw new Error("PayPal-Zahlung wurde nicht abgeschlossen.");
-      }
-      if (capture.orderId !== orderId) {
-        throw new Error("PayPal-Antwort enthält eine ungültige Bestellung.");
-      }
-      if (capture.customId !== pending.id) {
-        throw new Error("PayPal-Zahlung enthält eine ungültige Referenz.");
-      }
-      if (capture.amountCents !== pending.feeAmountCents) {
-        throw new Error(
-          "PayPal-Zahlungsbetrag stimmt nicht mit der Kursgebühr überein.",
+      const result = await reconcilePendingPaidRegistration(pending.id, true);
+      if (result?.status === "requires_review") {
+        return c.redirect(
+          `/courses/${pending.courseId}?course_error=${
+            encodeURIComponent(
+              "Die Zahlung muss geprüft werden. Bitte kontaktiere den Veranstalter.",
+            )
+          }`,
+          303,
         );
       }
-      if (capture.currency !== pending.feeCurrency.toUpperCase()) {
-        throw new Error(
-          "PayPal-Währung stimmt nicht mit der Kursgebühr überein.",
+      if (!result || result.status !== "finalized") {
+        return c.redirect(
+          `/courses/${pending.courseId}?payment_pending=1`,
+          303,
         );
       }
-
-      if (!pending.capture) {
-        const captured = await updatePendingPaidRegistration({
-          ...pending,
-          status: "captured",
-          capture,
-        });
-        if (!captured) {
-          const refreshed = await getPendingPaidRegistration(pending.id);
-          if (!refreshed?.capture) {
-            throw new Error("Zahlungsstatus konnte nicht gespeichert werden.");
-          }
-        }
-      }
-
-      const created = await submitRegistrationWithDoubleOptIn(
-        pending.registrationInput,
-        {
-          provider: "paypal",
-          captureId: capture.captureId,
-          amountCents: capture.amountCents,
-          currency: capture.currency,
-          paidAt: new Date().toISOString(),
-        },
-        {
-          registrationId: pending.registrationId,
-          confirmationToken: pending.confirmationToken,
-          skipEligibilityRecheck: true,
-        },
-      );
-      await updatePendingPaidRegistration({
-        ...pending,
-        status: "finalized",
-        capture,
-        registrationId: created.registration.id,
-      });
 
       logger.info("registration.paypal.completed", {
         ...trace,
         courseId: pending.courseId,
-        registrationId: created.registration.id,
+        registrationId: result.registrationId,
         paypalOrderId: orderId,
-        paypalCaptureId: capture.captureId,
+        paypalCaptureId: result.capture?.captureId,
       });
 
       return successRedirect();

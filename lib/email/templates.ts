@@ -1,4 +1,5 @@
 import { env } from "../env.ts";
+import { formatAppDateTime } from "../time.ts";
 import type { Course, Registration } from "../types.ts";
 
 export type RegistrationEmailEvent =
@@ -41,7 +42,7 @@ interface HtmlEmailOptions {
 
 function formatCourseDate(value: string | null): string {
   if (!value) return "Nicht angegeben";
-  return new Date(value).toLocaleString("de-DE");
+  return formatAppDateTime(value);
 }
 
 function courseFacts(course: Course): Array<{ label: string; value: string }> {
@@ -449,7 +450,7 @@ export function renderRegistrationTemplate(
 
 export function renderCourseBroadcastTemplate(
   event: CourseBroadcastEvent,
-  reg: Registration,
+  reg: Pick<Registration, "firstName" | "lastName">,
   course: Course,
   changes?: CourseChangeDetails,
 ): EmailTemplate {

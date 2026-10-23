@@ -1,32 +1,15 @@
 import { hasRole } from "@/lib/auth/roles.ts";
-import { appendAuditLog } from "@/lib/audit/repository.ts";
-import { getCourseById, upsertCourse } from "@/lib/courses/repository.ts";
-import { sendCourseBroadcastEmails } from "@/lib/email/service.ts";
+import {
+  getCourseChangeEntry,
+  processCourseNotificationEvents,
+  saveCourseChangeChecked,
+} from "@/lib/courses/service.ts";
+import { processEmailOutboxBatch } from "@/lib/email/service.ts";
+import { logger } from "@/lib/observability/logger.ts";
 import { rebuildPublicSnapshotsForCourse } from "@/lib/public_snapshot/service.ts";
-import { listRegistrationsByCourse } from "@/lib/registrations/repository.ts";
 import type { AppEnv } from "@/src/app/context.ts";
 import { parseCoursePayload } from "@/src/routes/shared/helpers.ts";
 import { Hono } from "hono";
-
-function criticalCourseChanges(
-  previous: Awaited<ReturnType<typeof getCourseById>> extends infer T ? T
-    : never,
-  next: NonNullable<Awaited<ReturnType<typeof getCourseById>>>,
-) {
-  if (!previous) return {};
-
-  return {
-    location: previous.location !== next.location
-      ? { before: previous.location, after: next.location }
-      : undefined,
-    startsAt: previous.startsAt !== next.startsAt
-      ? { before: previous.startsAt, after: next.startsAt }
-      : undefined,
-    endsAt: previous.endsAt !== next.endsAt
-      ? { before: previous.endsAt, after: next.endsAt }
-      : undefined,
-  };
-}
 
 export const adminCoursesUpdateRoute = new Hono<AppEnv>().post(
   "/:id/update",
@@ -36,14 +19,15 @@ export const adminCoursesUpdateRoute = new Hono<AppEnv>().post(
       return c.text("Forbidden", 403);
     }
 
-    const existing = await getCourseById(c.req.param("id"));
-    if (!existing) {
+    const entry = await getCourseChangeEntry(c.req.param("id"));
+    if (!entry.value) {
       return c.redirect(
         "/admin/courses?course_error=Kurs+nicht+gefunden",
         303,
       );
     }
 
+    const existing = entry.value;
     try {
       const form = await c.req.formData();
       const payload = parseCoursePayload(form);
@@ -64,54 +48,27 @@ export const adminCoursesUpdateRoute = new Hono<AppEnv>().post(
         waitingListEnabled: payload.waitingListEnabled,
         reminderDaysBefore: payload.reminderDaysBefore,
       };
-      await upsertCourse(nextCourse);
-      await rebuildPublicSnapshotsForCourse(existing.id);
-
-      const registrations = await listRegistrationsByCourse(existing.id);
-      const changes = criticalCourseChanges(existing, nextCourse);
-      const hasCriticalChanges = Boolean(
-        changes.location || changes.startsAt || changes.endsAt,
+      await saveCourseChangeChecked(
+        { ...entry, value: existing },
+        nextCourse,
+        sessionUser.id,
+        "course.updated",
       );
-      const archivedNow = existing.status !== "archived" &&
-        nextCourse.status === "archived";
-
-      let notifiedCount = 0;
-      if (archivedNow) {
-        notifiedCount = await sendCourseBroadcastEmails(
-          registrations,
-          nextCourse,
-          "course_cancelled",
-        );
-      } else if (hasCriticalChanges) {
-        notifiedCount = await sendCourseBroadcastEmails(
-          registrations,
-          nextCourse,
-          "course_critical_update",
-          changes,
-        );
+      try {
+        await rebuildPublicSnapshotsForCourse(existing.id);
+      } catch (error) {
+        logger.error("course.snapshot_refresh_failed", {
+          courseId: existing.id,
+          error,
+        });
       }
-
-      await appendAuditLog({
-        actorUserId: sessionUser.id,
-        entityType: "course",
-        entityId: existing.id,
-        action: "course.updated",
-        oldValue: JSON.stringify(existing),
-        newValue: JSON.stringify(nextCourse),
-      });
-      if (notifiedCount > 0) {
-        await appendAuditLog({
-          actorUserId: sessionUser.id,
-          entityType: "course",
-          entityId: existing.id,
-          action: archivedNow
-            ? "course.attendees_cancelled_notified"
-            : "course.attendees_update_notified",
-          oldValue: null,
-          newValue: JSON.stringify({
-            notifiedCount,
-            changes,
-          }),
+      try {
+        await processCourseNotificationEvents(1);
+        await processEmailOutboxBatch(20);
+      } catch (error) {
+        logger.error("course.notification_deferred", {
+          courseId: existing.id,
+          error,
         });
       }
 

@@ -142,4 +142,10 @@ export interface EmailOutboxJob {
   eventKey?: string;
   leaseOwner?: string | null;
   leaseExpiresAt?: string | null;
+  confirmationTokenHash?: string;
+  reminder?: {
+    courseId: string;
+    startsAt: string;
+    daysBefore: number;
+  };
 }

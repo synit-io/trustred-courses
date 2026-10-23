@@ -40,6 +40,12 @@ jobs:
       - name: Run unit tests
         run: deno task test
 
+      - name: Verify executable entrypoints and timezone isolation
+        run: deno task test:runtime
+
+      - name: Verify Compose configuration forwarding
+        run: deno task test:config
+
   e2e:
     name: End-to-End Tests
     runs-on: ubuntu-latest

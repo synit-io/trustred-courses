@@ -1,5 +1,6 @@
 import { getKv } from "../kv/client.ts";
 import { normalizeCoursePricing } from "../courses/repository.ts";
+import { getCourseRevisionEntry } from "../courses/revision.ts";
 import type { Course, Registration } from "../types.ts";
 
 export interface PublicSeatSnapshot {
@@ -192,177 +193,93 @@ function sortHomeCourses(
   );
 }
 
-async function ensureHomeSnapshot(kv: Deno.Kv): Promise<PublicHomeSnapshot> {
-  const entry = await kv.get<PublicHomeSnapshot>(["public_snapshot", "home"]);
-  if (entry.value) {
-    return entry.value;
-  }
-  return await rebuildAllPublicSnapshots();
-}
-
-async function upsertCourseIntoHomeSnapshot(
-  kv: Deno.Kv,
-  detailSnapshot: PublicCourseDetailSnapshot,
-): Promise<PublicHomeSnapshot> {
-  for (let attempt = 0; attempt < 5; attempt += 1) {
-    let homeEntry = await kv.get<PublicHomeSnapshot>(
-      ["public_snapshot", "home"],
-      { consistency: "strong" },
-    );
-    if (!homeEntry.value) {
-      await ensureHomeSnapshot(kv);
-      homeEntry = await kv.get<PublicHomeSnapshot>(
-        ["public_snapshot", "home"],
-        { consistency: "strong" },
-      );
-    }
-    const nextCourses = (homeEntry.value?.courses ?? []).filter((course) =>
-      course.id !== detailSnapshot.course.id
-    );
-    if (isVisibleOnPublicHome(detailSnapshot.course)) {
-      nextCourses.push({
-        ...detailSnapshot.course,
-        seats: detailSnapshot.seats,
-      });
-    }
-    const nextHome: PublicHomeSnapshot = {
-      generatedAt: detailSnapshot.generatedAt,
-      courses: sortHomeCourses(nextCourses),
-    };
-    const commit = await kv.atomic()
-      .check(homeEntry)
-      .set(
-        ["public_snapshot", "meta"],
-        {
-          schemaVersion: 1,
-          generatedAt: detailSnapshot.generatedAt,
-        } satisfies PublicSnapshotMeta,
-      )
-      .set(["public_snapshot", "home"], nextHome)
-      .set(
-        ["public_snapshot", "course", detailSnapshot.course.id],
-        detailSnapshot,
-      )
-      .commit();
-    if (commit.ok) return nextHome;
-  }
-  throw new Error("Public snapshot update conflicted repeatedly.");
-}
-
-async function removeCourseFromSnapshots(
+// Store each card separately: the catalogue and rebuild transaction may grow
+// beyond the KV limits for one value/transaction without growing any one write.
+async function publishCourseSnapshot(
   kv: Deno.Kv,
   courseId: string,
-): Promise<PublicHomeSnapshot> {
-  for (let attempt = 0; attempt < 5; attempt += 1) {
-    let homeEntry = await kv.get<PublicHomeSnapshot>(
-      ["public_snapshot", "home"],
-      { consistency: "strong" },
-    );
-    if (!homeEntry.value) {
-      await ensureHomeSnapshot(kv);
-      homeEntry = await kv.get<PublicHomeSnapshot>(
-        ["public_snapshot", "home"],
-        { consistency: "strong" },
-      );
+): Promise<PublicCourseDetailSnapshot | null> {
+  for (let attempt = 0; attempt < 10; attempt++) {
+    const revision = await getCourseRevisionEntry(courseId);
+    const course = await readCourseStrong(kv, courseId);
+    const detail = course?.status === "active"
+      ? await buildCourseDetailSnapshot(kv, course, new Date().toISOString())
+      : null;
+    const tx = kv.atomic().check(revision);
+    if (detail) {
+      tx.set(["public_snapshot", "course", courseId], detail);
+    } else {
+      tx.delete(["public_snapshot", "course", courseId]);
     }
-    const generatedAt = new Date().toISOString();
-    const nextHome: PublicHomeSnapshot = {
-      generatedAt,
-      courses: (homeEntry.value?.courses ?? []).filter((course) =>
-        course.id !== courseId
-      ),
-    };
-    const commit = await kv.atomic()
-      .check(homeEntry)
-      .set(
-        ["public_snapshot", "meta"],
+    if (detail && isVisibleOnPublicHome(detail.course)) {
+      tx.set(
+        ["public_snapshot", "card", courseId],
         {
-          schemaVersion: 1,
-          generatedAt,
-        } satisfies PublicSnapshotMeta,
-      )
-      .set(["public_snapshot", "home"], nextHome)
-      .delete(["public_snapshot", "course", courseId])
-      .commit();
-    if (commit.ok) return nextHome;
+          ...detail.course,
+          seats: detail.seats,
+        } satisfies PublicCourseCardSnapshot,
+      );
+    } else {
+      tx.delete(["public_snapshot", "card", courseId]);
+    }
+    if ((await tx.commit()).ok) return detail;
   }
-  throw new Error("Public snapshot removal conflicted repeatedly.");
+  throw new Error("Public snapshot source changed repeatedly.");
+}
+
+async function readHomeCards(kv: Deno.Kv): Promise<PublicHomeSnapshot> {
+  const courses: PublicCourseCardSnapshot[] = [];
+  for await (
+    const entry of kv.list<PublicCourseCardSnapshot>({
+      prefix: ["public_snapshot", "card"],
+    })
+  ) {
+    const course = normalizePublicCourseSnapshot(entry.value);
+    if (isVisibleOnPublicHome(course)) {
+      courses.push({ ...course, seats: entry.value.seats });
+    }
+  }
+  return {
+    generatedAt: new Date().toISOString(),
+    courses: sortHomeCourses(courses),
+  };
 }
 
 export async function rebuildPublicHomeSnapshot(): Promise<PublicHomeSnapshot> {
   const kv = await getKv();
-  const generatedAt = new Date().toISOString();
-  const courses = await listCoursesStrong(kv);
-  const activeCourses = courses.filter((course) =>
-    isVisibleOnPublicHome(course)
-  );
-  const detailSnapshots = await Promise.all(
-    activeCourses.map((course) =>
-      buildCourseDetailSnapshot(kv, course, generatedAt)
-    ),
-  );
-
-  const homeSnapshot: PublicHomeSnapshot = {
-    generatedAt,
-    courses: sortHomeCourses(detailSnapshots.map((detail) => ({
-      ...detail.course,
-      seats: detail.seats,
-    }))),
-  };
-
-  const tx = kv.atomic()
-    .set(
-      ["public_snapshot", "meta"],
-      {
-        schemaVersion: 1,
-        generatedAt,
-      } satisfies PublicSnapshotMeta,
-    )
-    .set(["public_snapshot", "home"], homeSnapshot);
-
-  for (const detail of detailSnapshots) {
-    tx.set(["public_snapshot", "course", detail.course.id], detail);
+  const ids = new Set((await listCoursesStrong(kv)).map((course) => course.id));
+  // Include old card/detail keys so rebuild also repairs deletions and archives.
+  for (const kind of ["card", "course"]) {
+    for await (const entry of kv.list({ prefix: ["public_snapshot", kind] })) {
+      ids.add(String(entry.key.at(-1)));
+    }
   }
-
-  await tx.commit();
-  return homeSnapshot;
+  for (const id of ids) await publishCourseSnapshot(kv, id);
+  // Publish schema readiness only after migrating every source course. Keep the
+  // previous aggregate as a read fallback until migration has completed.
+  await kv.set(
+    ["public_snapshot", "meta"],
+    {
+      schemaVersion: 2,
+      generatedAt: new Date().toISOString(),
+    } satisfies PublicSnapshotMeta,
+  );
+  return await readHomeCards(kv);
 }
 
 export async function rebuildPublicCourseSnapshot(
   courseId: string,
 ): Promise<PublicCourseDetailSnapshot | null> {
-  const kv = await getKv();
-  const course = await readCourseStrong(kv, courseId);
-  if (!course || course.status !== "active") {
-    await removeCourseFromSnapshots(kv, courseId);
-    return null;
-  }
-
-  const snapshot = await buildCourseDetailSnapshot(
-    kv,
-    course,
-    new Date().toISOString(),
-  );
-  await kv.set(["public_snapshot", "course", courseId], snapshot);
-  return snapshot;
+  return await rebuildPublicSnapshotsForCourse(courseId);
 }
 
 export async function rebuildPublicSnapshotsForCourse(
   courseId: string,
 ): Promise<PublicCourseDetailSnapshot | null> {
   const kv = await getKv();
-  const course = await readCourseStrong(kv, courseId);
-  if (!course || course.status !== "active") {
-    await removeCourseFromSnapshots(kv, courseId);
-    return null;
-  }
-
-  const detail = await buildCourseDetailSnapshot(
-    kv,
-    course,
-    new Date().toISOString(),
-  );
-  await upsertCourseIntoHomeSnapshot(kv, detail);
+  const detail = await publishCourseSnapshot(kv, courseId);
+  const meta = await kv.get<PublicSnapshotMeta>(["public_snapshot", "meta"]);
+  if (meta.value?.schemaVersion !== 2) await rebuildPublicHomeSnapshot();
   return detail;
 }
 
@@ -372,19 +289,24 @@ export async function rebuildAllPublicSnapshots(): Promise<PublicHomeSnapshot> {
 
 export async function getPublicHomeSnapshot(): Promise<PublicHomeSnapshot> {
   const kv = await getKv();
-  const entry = await kv.get<PublicHomeSnapshot>(["public_snapshot", "home"]);
-  if (entry.value) {
+  const meta = await kv.get<PublicSnapshotMeta>(["public_snapshot", "meta"]);
+  if (meta.value?.schemaVersion === 2) return await readHomeCards(kv);
+  try {
+    return await rebuildAllPublicSnapshots();
+  } catch (error) {
+    const legacy = await kv.get<PublicHomeSnapshot>([
+      "public_snapshot",
+      "home",
+    ]);
+    if (!legacy.value) throw error;
     return {
-      ...entry.value,
-      courses: entry.value.courses
-        .map((course) => ({
-          ...normalizePublicCourseSnapshot(course),
-          seats: course.seats,
-        }))
-        .filter((course) => isVisibleOnPublicHome(course)),
+      ...legacy.value,
+      courses: legacy.value.courses.map((course) => ({
+        ...normalizePublicCourseSnapshot(course),
+        seats: course.seats,
+      })).filter(isVisibleOnPublicHome),
     };
   }
-  return await rebuildAllPublicSnapshots();
 }
 
 export async function getPublicCourseDetailSnapshot(

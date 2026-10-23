@@ -35,6 +35,7 @@ export interface EnvConfig {
   demoModeResetCron: string;
   demoModeResetCourses: number;
   appBaseUrl: string;
+  appTimeZone: string;
   authCookieName: string;
   authMagicLinkBindingCookieName: string;
   trustedClientIpHeader: string;
@@ -81,6 +82,7 @@ export const env: EnvConfig = {
     optionalNumber("DEMO_MODE_RESET_COURSES", 10),
   ),
   appBaseUrl: Deno.env.get("APP_BASE_URL") ?? "http://localhost:8000",
+  appTimeZone: Deno.env.get("APP_TIME_ZONE")?.trim() || "Europe/Berlin",
   authCookieName: Deno.env.get("AUTH_COOKIE_NAME") ?? "session",
   authMagicLinkBindingCookieName:
     Deno.env.get("AUTH_MAGIC_LINK_BINDING_COOKIE_NAME") ?? "ml_bind",
@@ -131,6 +133,13 @@ export const env: EnvConfig = {
   paypalClientId: Deno.env.get("PAYPAL_CLIENT_ID") ?? "",
   paypalClientSecret: Deno.env.get("PAYPAL_CLIENT_SECRET") ?? "",
 };
+
+// Fail at startup instead of accepting dates under an unintended fallback zone.
+try {
+  new Intl.DateTimeFormat("en", { timeZone: env.appTimeZone }).format(0);
+} catch {
+  throw new Error(`Invalid APP_TIME_ZONE: ${env.appTimeZone}`);
+}
 
 export function ensureSmtpConfig(): void {
   required("SMTP_HOST");

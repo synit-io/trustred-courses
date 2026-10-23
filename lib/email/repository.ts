@@ -100,6 +100,7 @@ export async function listDueEmailOutbox(
 export async function claimDueEmailOutbox(
   limit: number,
   now = new Date(),
+  excludedIds: ReadonlySet<string> = new Set(),
 ): Promise<EmailOutboxJob[]> {
   const kv = await getKv();
   const claimed: EmailOutboxJob[] = [];
@@ -111,6 +112,7 @@ export async function claimDueEmailOutbox(
   ) {
     if (claimed.length >= limit) break;
     const job = entry.value;
+    if (excludedIds.has(job.id)) continue;
     if (Date.parse(job.nextAttemptAt) > now.getTime()) continue;
     if (
       job.leaseExpiresAt && Date.parse(job.leaseExpiresAt) > now.getTime()
@@ -121,6 +123,81 @@ export async function claimDueEmailOutbox(
     }
   }
   return claimed;
+}
+
+/** Refresh ownership immediately before dispatch; a stale claim must never start mail. */
+export async function renewClaimedEmailOutbox(
+  job: EmailOutboxJob,
+  now = new Date(),
+): Promise<EmailOutboxJob | null> {
+  const kv = await getKv();
+  const current = await kv.get<EmailOutboxJob>(["email_outbox", job.id], {
+    consistency: "strong",
+  });
+  if (
+    !current.value || !job.leaseOwner ||
+    current.value.leaseOwner !== job.leaseOwner ||
+    !current.value.leaseExpiresAt ||
+    Date.parse(current.value.leaseExpiresAt) <= now.getTime()
+  ) return null;
+  const renewed = {
+    ...current.value,
+    leaseExpiresAt: new Date(now.getTime() + 5 * 60 * 1000).toISOString(),
+  };
+  return (await kv.atomic().check(current).set(current.key, renewed).commit())
+      .ok
+    ? renewed
+    : null;
+}
+
+export async function deadLetterClaimedEmailOutbox(
+  job: EmailOutboxJob,
+): Promise<boolean> {
+  const kv = await getKv();
+  const current = await kv.get<EmailOutboxJob>(["email_outbox", job.id], {
+    consistency: "strong",
+  });
+  if (!current.value || current.value.leaseOwner !== job.leaseOwner) {
+    return false;
+  }
+  return (await kv.atomic().check(current)
+    .set(["email_dead_letters", job.id], {
+      ...job,
+      leaseOwner: null,
+      leaseExpiresAt: null,
+      failedAt: new Date().toISOString(),
+    }).delete(current.key).commit()).ok;
+}
+
+export async function listEmailOutboxHealth(now = new Date()): Promise<{
+  pending: number;
+  due: number;
+  leased: number;
+  oldestPendingAt: string | null;
+  deadLetters: number;
+}> {
+  const kv = await getKv();
+  let pending = 0;
+  let due = 0;
+  let leased = 0;
+  let oldestPendingAt: string | null = null;
+  let deadLetters = 0;
+  for await (
+    const { value } of kv.list<EmailOutboxJob>({ prefix: ["email_outbox"] })
+  ) {
+    pending++;
+    if (Date.parse(value.nextAttemptAt) <= now.getTime()) due++;
+    if (
+      value.leaseExpiresAt && Date.parse(value.leaseExpiresAt) > now.getTime()
+    ) leased++;
+    if (!oldestPendingAt || value.createdAt < oldestPendingAt) {
+      oldestPendingAt = value.createdAt;
+    }
+  }
+  for await (const _entry of kv.list({ prefix: ["email_dead_letters"] })) {
+    deadLetters++;
+  }
+  return { pending, due, leased, oldestPendingAt, deadLetters };
 }
 
 export async function deleteClaimedEmailOutbox(
@@ -153,15 +230,44 @@ export async function updateClaimedEmailOutbox(
   }).commit()).ok;
 }
 
+export interface EmailLogReference {
+  id: string;
+  sentAt: string;
+}
+
+export async function listEmailLogReferencesByRegistration(
+  registrationId: string,
+): Promise<EmailLogReference[]> {
+  const kv = await getKv();
+  const references: EmailLogReference[] = [];
+  for await (
+    const entry of kv.list({
+      prefix: ["email_logs_by_registration", registrationId],
+    }, { reverse: true })
+  ) {
+    references.push({
+      id: String(entry.key.at(-1)),
+      sentAt: String(entry.key.at(-2)),
+    });
+  }
+  return references;
+}
+
+export async function hydrateEmailLogs(ids: string[]): Promise<EmailLog[]> {
+  const kv = await getKv();
+  const logs: EmailLog[] = [];
+  for (const id of ids) {
+    const entry = await kv.get<EmailLog>(["email_logs", id]);
+    if (entry.value) logs.push(entry.value);
+  }
+  return logs;
+}
+
 export async function listEmailLogsByRegistration(
   registrationId: string,
 ): Promise<EmailLog[]> {
-  const page = await listEmailLogsByRegistrationPaginated(
-    registrationId,
-    1,
-    500,
-  );
-  return page.items;
+  const references = await listEmailLogReferencesByRegistration(registrationId);
+  return await hydrateEmailLogs(references.map((r) => r.id));
 }
 
 export async function listEmailLogsByRegistrationPaginated(
@@ -169,30 +275,15 @@ export async function listEmailLogsByRegistrationPaginated(
   page = 1,
   pageSize = 10,
 ): Promise<EmailLogPage> {
-  const kv = await getKv();
-  const logs: EmailLog[] = [];
-
-  for await (
-    const idx of kv.list<string>({
-      prefix: ["email_logs_by_registration", registrationId],
-    })
-  ) {
-    const logId = String(idx.key.at(-1));
-    const entry = await kv.get<EmailLog>(["email_logs", logId]);
-    if (entry.value) {
-      logs.push(entry.value);
-    }
-  }
-
-  const sorted = logs.sort((a, b) => b.sentAt.localeCompare(a.sentAt));
+  const references = await listEmailLogReferencesByRegistration(registrationId);
   const safePage = Math.max(1, Math.floor(page));
-  const safePageSize = Math.max(1, Math.floor(pageSize));
+  const safePageSize = Math.max(1, Math.min(100, Math.floor(pageSize)));
   const start = (safePage - 1) * safePageSize;
-  const end = start + safePageSize;
-
   return {
-    items: sorted.slice(start, end),
-    total: sorted.length,
+    items: await hydrateEmailLogs(
+      references.slice(start, start + safePageSize).map((r) => r.id),
+    ),
+    total: references.length,
     page: safePage,
     pageSize: safePageSize,
   };

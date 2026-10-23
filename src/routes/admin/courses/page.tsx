@@ -1,3 +1,4 @@
+import { formatAppDateTime } from "@/lib/time.ts";
 import { hasRole } from "@/lib/auth/roles.ts";
 import { listCourseSummaries } from "@/lib/admin/course_summaries.ts";
 import type { AppEnv } from "@/src/app/context.ts";
@@ -111,9 +112,7 @@ export const adminCoursesPage = new Hono<AppEnv>().get(
                       </h3>
                       <p class="text-body-muted mt-1 text-sm">
                         {summary.course.location} ·{" "}
-                        {new Date(summary.course.startsAt).toLocaleString(
-                          "de-DE",
-                        )}
+                        {formatAppDateTime(summary.course.startsAt)}
                       </p>
                     </div>
                     <div class="flex flex-wrap items-center gap-2">
@@ -162,7 +161,7 @@ export const adminCoursesPage = new Hono<AppEnv>().get(
                   <div class="text-body-muted mt-4 flex flex-wrap items-center justify-between gap-3 text-sm">
                     <p>
                       Kapazität {summary.course.capacity} · Kursende{" "}
-                      {new Date(summary.course.endsAt).toLocaleString("de-DE")}
+                      {formatAppDateTime(summary.course.endsAt)}
                       {" · Preis "}
                       {summary.course.pricingType === "paid"
                         ? formatCourseFee(

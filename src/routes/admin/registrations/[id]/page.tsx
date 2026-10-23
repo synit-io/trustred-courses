@@ -1,6 +1,13 @@
-import { listAuditLogsByEntity } from "@/lib/audit/repository.ts";
+import {
+  hydrateAuditLogs,
+  listAuditLogReferencesByEntity,
+} from "@/lib/audit/repository.ts";
 import { getCourseById } from "@/lib/courses/repository.ts";
-import { listEmailLogsByRegistration } from "@/lib/email/repository.ts";
+import {
+  hydrateEmailLogs,
+  listEmailLogReferencesByRegistration,
+} from "@/lib/email/repository.ts";
+import { formatAppDateTime } from "@/lib/time.ts";
 import { getRegistrationById } from "@/lib/registrations/repository.ts";
 import type { AppEnv } from "@/src/app/context.ts";
 import { LogPager } from "@/src/components/ui/log-pager.tsx";
@@ -212,31 +219,16 @@ function buildEmailTimelineItem(
   };
 }
 
-function paginateTimeline(
-  items: TimelineItem[],
-  page: number,
-  pageSize: number,
-) {
-  const safePage = Math.max(1, Math.floor(page));
-  const start = (safePage - 1) * pageSize;
-  return {
-    items: items.slice(start, start + pageSize),
-    total: items.length,
-    page: safePage,
-    pageSize,
-  };
-}
-
 export const adminRegistrationDetailPage = new Hono<AppEnv>().get(
   "/:id",
   async (c) => {
     const registration = await getRegistrationById(c.req.param("id"));
     if (!registration) return c.text("Anmeldung nicht gefunden", 404);
 
-    const [course, auditLogs, emailLogs] = await Promise.all([
+    const [course, auditReferences, emailReferences] = await Promise.all([
       getCourseById(registration.courseId),
-      listAuditLogsByEntity("registration", registration.id),
-      listEmailLogsByRegistration(registration.id),
+      listAuditLogReferencesByEntity("registration", registration.id),
+      listEmailLogReferencesByRegistration(registration.id),
     ]);
 
     const updated = c.req.query("updated") === "1";
@@ -245,15 +237,44 @@ export const adminRegistrationDetailPage = new Hono<AppEnv>().get(
     const queryString = new URL(c.req.url).searchParams.toString();
     const resendOptions = resendEventOptionsForStatus(registration.status);
 
-    const timelineItems = [
+    const references = [
+      ...auditReferences.map((r) => ({
+        id: r.id,
+        ts: r.createdAt,
+        source: "audit",
+      })),
+      ...emailReferences.map((r) => ({
+        id: r.id,
+        ts: r.sentAt,
+        source: "email",
+      })),
+    ].sort((a, b) =>
+      b.ts.localeCompare(a.ts) || a.source.localeCompare(b.source) ||
+      b.id.localeCompare(a.id)
+    );
+    const page = parsePage(c.req.query("timelinePage") ?? null);
+    const start = (page - 1) * LOG_PAGE_SIZE;
+    const selected = references.slice(start, start + LOG_PAGE_SIZE);
+    const [auditLogs, emailLogs] = await Promise.all([
+      hydrateAuditLogs(
+        selected.filter((r) => r.source === "audit").map((r) => r.id),
+      ),
+      hydrateEmailLogs(
+        selected.filter((r) => r.source === "email").map((r) => r.id),
+      ),
+    ]);
+    const items = new Map([
       ...auditLogs.map(buildAuditTimelineItem),
       ...emailLogs.map(buildEmailTimelineItem),
-    ].sort((a, b) => b.ts.localeCompare(a.ts));
-    const timelinePage = paginateTimeline(
-      timelineItems,
-      parsePage(c.req.query("timelinePage") ?? null),
-      LOG_PAGE_SIZE,
-    );
+    ].map((item) => [item.id, item]));
+    const timelinePage = {
+      items: selected.map((r) => items.get(`${r.source}-${r.id}`)).filter((
+        item,
+      ): item is TimelineItem => !!item),
+      total: references.length,
+      page,
+      pageSize: LOG_PAGE_SIZE,
+    };
 
     return c.render(
       <div class="space-y-6">
@@ -470,7 +491,7 @@ export const adminRegistrationDetailPage = new Hono<AppEnv>().get(
                   <span class={toneClass(item.tone)}>{item.label}</span>
                 </div>
                 <p class="text-body-muted mt-1">
-                  {new Date(item.ts).toLocaleString("de-DE")}
+                  {formatAppDateTime(item.ts)}
                 </p>
                 {item.details.length > 0
                   ? (

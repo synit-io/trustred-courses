@@ -4,7 +4,7 @@ import {
 } from "@/lib/payments/paypal.ts";
 import { enforcePayPalRateLimit } from "@/lib/payments/rate_limit.ts";
 import type { AppEnv } from "@/src/app/context.ts";
-import { extractRequestIp } from "@/src/routes/shared/helpers.ts";
+import { resolveClientIp } from "@/src/routes/shared/helpers.ts";
 import { Hono } from "hono";
 
 export const registrationPayPalCancelRoute = new Hono<AppEnv>().get(
@@ -15,9 +15,13 @@ export const registrationPayPalCancelRoute = new Hono<AppEnv>().get(
     if (!state || !orderId) {
       return c.redirect("/?course_error=Zahlung+abgebrochen", 303);
     }
+    const requestIp = resolveClientIp(c);
+    if (!requestIp) {
+      return c.redirect("/?course_error=Anfrageadresse+nicht+verfügbar", 303);
+    }
     const rateLimit = await enforcePayPalRateLimit(
       "callback",
-      extractRequestIp(c.req.raw.headers),
+      requestIp,
     );
     if (!rateLimit.allowed) {
       c.header("Retry-After", String(rateLimit.retryAfterSeconds));
@@ -39,13 +43,17 @@ export const registrationPayPalCancelRoute = new Hono<AppEnv>().get(
         303,
       );
     }
-    if (pending.status === "captured") {
+    if (
+      pending.status !== "creating" && pending.status !== "checkout_created"
+    ) {
       return c.redirect(
         `/courses/${pending.courseId}?course_error=Zahlung+wird+verarbeitet`,
         303,
       );
     }
-    await deletePendingPaidRegistration(state);
+    if (!await deletePendingPaidRegistration(state, orderId)) {
+      return c.redirect(`/courses/${pending.courseId}?payment_pending=1`, 303);
+    }
     return c.redirect(
       `/courses/${pending.courseId}?payment_cancelled=1`,
       303,

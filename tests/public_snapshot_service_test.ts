@@ -1,4 +1,4 @@
-import { assert, assertEquals } from "@std/assert";
+import { assert, assertEquals, assertRejects } from "@std/assert";
 import {
   getPublicCourseDetailSnapshot,
   getPublicHomeSnapshot,
@@ -201,6 +201,142 @@ Deno.test("public home snapshot excludes courses that already started", async ()
     assertEquals(cachedHome.courses.map((course) => course.id), [
       "course-future",
     ]);
+  } finally {
+    await cleanup();
+  }
+});
+
+Deno.test("public publication and repair exceed aggregate value and transaction limits", async () => {
+  const { kv, cleanup } = await setupKvTest("public_large_catalogue_");
+  try {
+    // More than 800 KiB in aggregate also exceeds one KV transaction's limit.
+    for (let i = 0; i < 100; i++) {
+      const course = {
+        ...courseFixture(`large-${String(i).padStart(3, "0")}`),
+        description: "Course description ".repeat(500),
+      };
+      await upsertCourse(course);
+      await rebuildPublicSnapshotsForCourse(course.id);
+    }
+    assertEquals((await getPublicHomeSnapshot()).courses.length, 100);
+    assertEquals((await rebuildAllPublicSnapshots()).courses.length, 100);
+    await kv.delete(["public_snapshot", "card", "large-099"]);
+    assertEquals((await rebuildAllPublicSnapshots()).courses.length, 100);
+    // The old aggregate remains a supported migration input, never a source write.
+    await kv.delete(["public_snapshot", "meta"]);
+    await kv.set(["public_snapshot", "home"], {
+      generatedAt: "2020-01-01T00:00:00Z",
+      courses: [],
+    });
+    assertEquals((await getPublicHomeSnapshot()).courses.length, 100);
+  } finally {
+    await cleanup();
+  }
+});
+
+Deno.test("every snapshot rebuild rejects a derivation from an older source revision", async () => {
+  const { __setKvFactoryForTests } = await import("../lib/kv/client.ts");
+  const { rebuildPublicCourseSnapshot, rebuildPublicHomeSnapshot } =
+    await import("../lib/public_snapshot/service.ts");
+  for (
+    const rebuild of [
+      () => rebuildPublicSnapshotsForCourse("race"),
+      () => rebuildPublicCourseSnapshot("race"),
+      () => rebuildPublicHomeSnapshot(),
+    ]
+  ) {
+    const { kv, cleanup } = await setupKvTest("snapshot_revision_");
+    let release!: () => void;
+    const released = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    let pause!: () => void;
+    const paused = new Promise<void>((resolve) => {
+      pause = resolve;
+    });
+    try {
+      await upsertCourse(courseFixture("race"));
+      await rebuildAllPublicSnapshots();
+      let intercept = true;
+      const proxy = new Proxy(kv, {
+        get(target, key) {
+          if (key === "list") {
+            return (
+              selector: Deno.KvListSelector,
+              options?: Deno.KvListOptions,
+            ) => {
+              const iterator = target.list(selector, options);
+              if (
+                intercept && "prefix" in selector &&
+                selector.prefix[0] === "registrations_by_course"
+              ) {
+                intercept = false;
+                return (async function* () {
+                  for await (const entry of iterator) yield entry;
+                  pause();
+                  await released;
+                })();
+              }
+              return iterator;
+            };
+          }
+          const member = Reflect.get(target, key, target);
+          return typeof member === "function" ? member.bind(target) : member;
+        },
+      });
+      __setKvFactoryForTests(() => Promise.resolve(proxy));
+      const older = rebuild();
+      await paused;
+      await createRegistration(
+        registrationFixture("reg-10", "race", "approved"),
+      );
+      await rebuildPublicSnapshotsForCourse("race");
+      release();
+      await older;
+      assertEquals(
+        (await getPublicHomeSnapshot()).courses[0].seats.approved,
+        1,
+      );
+      assertEquals(
+        (await getPublicCourseDetailSnapshot("race"))?.seats.approved,
+        1,
+      );
+    } finally {
+      release();
+      await cleanup();
+    }
+  }
+});
+
+Deno.test("oversized UTF-8 course text is rejected before changing source or published snapshots", async () => {
+  const { kv, cleanup } = await setupKvTest("snapshot_single_value_boundary_");
+  try {
+    const course = courseFixture("boundary");
+    await upsertCourse(course);
+    await rebuildPublicSnapshotsForCourse(course.id);
+    const before = await kv.get(["courses", course.id]);
+    const published = await getPublicCourseDetailSnapshot(course.id);
+    // 28 KiB of valid Unicode text, despite fewer than 24 Ki characters.
+    await assertRejects(
+      () => upsertCourse({ ...course, description: "🚑".repeat(7000) }),
+      Error,
+      "kürze",
+    );
+    assertEquals(
+      (await kv.get(["courses", course.id])).versionstamp,
+      before.versionstamp,
+    );
+    assertEquals(await getPublicCourseDetailSnapshot(course.id), published);
+    await assertRejects(
+      () =>
+        upsertCourse({
+          ...courseFixture("new-boundary"),
+          description: "a".repeat(65193),
+        }),
+      Error,
+      "kürze",
+    );
+    assertEquals((await kv.get(["courses", "new-boundary"])).value, null);
   } finally {
     await cleanup();
   }

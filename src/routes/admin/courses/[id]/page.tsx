@@ -1,3 +1,4 @@
+import { formatAppDateTime } from "@/lib/time.ts";
 import { hasRole } from "@/lib/auth/roles.ts";
 import {
   DEMO_DELETE_BLOCKED_MESSAGE,
@@ -142,12 +143,21 @@ export const adminCourseDetailPage = new Hono<AppEnv>().get(
             <p class="text-label">
               Gesamtumsatz
             </p>
-            <p class="stat-number stat-number-success stat-number-sm mt-1">
-              {course.pricingType === "paid"
-                ? formatCourseFee(summary.totalRevenueCents, course.feeCurrency)
-                : "-"}
-            </p>
-            {course.pricingType === "paid"
+            <div class="stat-number stat-number-success stat-number-sm mt-1">
+              {summary.revenueByCurrency.length === 0
+                ? "-"
+                : summary.revenueByCurrency.map((revenue) => (
+                  <p key={revenue.currency}>
+                    {revenue.currency === "UNKNOWN"
+                      ? `${revenue.totalRevenueCents} Cent (Währung unbekannt)`
+                      : formatCourseFee(
+                        revenue.totalRevenueCents,
+                        revenue.currency,
+                      )}
+                  </p>
+                ))}
+            </div>
+            {summary.paidRegistrationCount > 0
               ? (
                 <p class="text-body-muted mt-1 text-xs">
                   {summary.paidRegistrationCount} bezahlt
@@ -460,9 +470,7 @@ export const adminCourseDetailPage = new Hono<AppEnv>().get(
                       </div>
                     </td>
                     <td>
-                      {new Date(registration.submittedAt).toLocaleString(
-                        "de-DE",
-                      )}
+                      {formatAppDateTime(registration.submittedAt)}
                     </td>
                     <td>
                       <a

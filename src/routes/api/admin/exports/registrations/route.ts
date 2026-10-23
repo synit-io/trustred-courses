@@ -1,5 +1,4 @@
-import { queryRegistrationRows } from "@/lib/admin/registration_rows.ts";
-import { listRegistrationsByCourse } from "@/lib/registrations/repository.ts";
+import { loadRegistrationExport } from "@/lib/admin/registration_rows.ts";
 import type { RegistrationStatus } from "@/lib/types.ts";
 import type { AppEnv } from "@/src/app/context.ts";
 import { Hono } from "hono";
@@ -8,7 +7,10 @@ export function csvEscape(value: string | number | null): string {
   if (value === null) return "";
   const raw = String(value);
   const text = /^[=+\-@]/.test(raw.trimStart()) ? `'${raw}` : raw;
-  if (text.includes(",") || text.includes("\n") || text.includes('"')) {
+  if (
+    text.includes(",") || text.includes("\n") || text.includes("\r") ||
+    text.includes('"')
+  ) {
     return `"${text.replaceAll('"', '""')}"`;
   }
   return text;
@@ -25,17 +27,7 @@ export const adminRegistrationsExportRoute = new Hono<AppEnv>().get(
       dateTo: c.req.query("dateTo") ?? undefined,
     };
 
-    const { rows } = await queryRegistrationRows(filters);
-    const courseRevenueByCourseId = new Map<string, number>();
-    for (const courseId of new Set(rows.map((row) => row.courseId))) {
-      const registrations = await listRegistrationsByCourse(courseId);
-      const totalRevenue = registrations.reduce((sum, registration) => {
-        const amount = Number(registration.paymentAmountCents ?? 0);
-        return sum +
-          (registration.paymentStatus === "paid" && amount > 0 ? amount : 0);
-      }, 0);
-      courseRevenueByCourseId.set(courseId, totalRevenue);
-    }
+    const { rows, revenueByCourseId } = await loadRegistrationExport(filters);
 
     const header = [
       "id",
@@ -55,31 +47,57 @@ export const adminRegistrationsExportRoute = new Hono<AppEnv>().get(
       "payment_currency",
       "payment_paid_at",
       "course_total_revenue_cents",
+      "course_total_revenue_currency",
+      "course_revenue_by_currency",
     ];
 
-    const body = rows.map((row) =>
-      [
-        row.id,
-        row.courseTitle,
-        row.firstName,
-        row.lastName,
-        row.email,
-        row.phone,
-        row.status,
-        row.waitingListPosition,
-        row.submittedAt,
-        row.reviewedAt,
-        row.reviewedBy,
-        row.paymentStatus ?? "not_required",
-        row.paymentProvider ?? "",
-        row.paymentAmountCents ?? "",
-        row.paymentCurrency ?? "",
-        row.paymentPaidAt ?? "",
-        courseRevenueByCourseId.get(row.courseId) ?? 0,
-      ].map(csvEscape).join(",")
-    );
-
-    const csv = [header.join(","), ...body].join("\n");
+    function* lines(): Generator<string> {
+      yield header.join(",");
+      for (const row of rows) {
+        const revenue = revenueByCourseId.get(row.courseId) ?? [];
+        const singleCurrency =
+          revenue.length === 1 && revenue[0].currency !== "UNKNOWN"
+            ? revenue[0]
+            : null;
+        yield "\n" + [
+          row.id,
+          row.courseTitle,
+          row.firstName,
+          row.lastName,
+          row.email,
+          row.phone,
+          row.status,
+          row.waitingListPosition,
+          row.submittedAt,
+          row.reviewedAt,
+          row.reviewedBy,
+          row.paymentStatus ?? "not_required",
+          row.paymentProvider ?? "",
+          row.paymentAmountCents ?? "",
+          row.paymentCurrency ?? "",
+          row.paymentPaidAt ?? "",
+          singleCurrency?.totalRevenueCents ?? (revenue.length === 0 ? 0 : ""),
+          singleCurrency?.currency ?? "",
+          JSON.stringify(
+            Object.fromEntries(
+              revenue.map((r) => [r.currency, r.totalRevenueCents]),
+            ),
+          ),
+        ].map(csvEscape).join(",");
+      }
+    }
+    const iterator = lines();
+    const encoder = new TextEncoder();
+    const stream = new ReadableStream<Uint8Array>({
+      pull(controller) {
+        const next = iterator.next();
+        if (next.done) controller.close();
+        else controller.enqueue(encoder.encode(next.value));
+      },
+      cancel() {
+        iterator.return(undefined);
+      },
+    });
 
     c.header("Content-Type", "text/csv; charset=utf-8");
     c.header(
@@ -88,6 +106,6 @@ export const adminRegistrationsExportRoute = new Hono<AppEnv>().get(
         new Date().toISOString().slice(0, 10)
       }.csv`,
     );
-    return c.body(csv);
+    return c.body(stream);
   },
 );

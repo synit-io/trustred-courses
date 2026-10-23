@@ -1,4 +1,5 @@
 import { getKv } from "../kv/client.ts";
+import { parseMailbox } from "../email/mailbox.ts";
 import type { User, UserRole } from "../types.ts";
 
 export function normalizeEmail(email: string): string {
@@ -7,46 +8,81 @@ export function normalizeEmail(email: string): string {
 
 export async function upsertUser(user: User): Promise<void> {
   const kv = await getKv();
-  await kv.atomic()
-    .set(["users", user.id], user)
-    .set(["users_by_email", user.emailNormalized], user.id)
-    .commit();
+  const email = parseMailbox(user.email);
+  if (!email || email !== user.emailNormalized) {
+    throw new Error("E-Mail ungültig");
+  }
+  for (let attempt = 0; attempt < 10; attempt++) {
+    const entries: [Deno.KvEntryMaybe<User>, Deno.KvEntryMaybe<string>] =
+      await kv.getMany<[User, string]>([
+        ["users", user.id],
+        ["users_by_email", email],
+      ], { consistency: "strong" });
+    const [current, index] = entries;
+    if (index.value && index.value !== user.id) {
+      throw new Error("E-Mail bereits vergeben");
+    }
+    if (current.value && current.value.emailNormalized !== email) {
+      throw new Error("E-Mail bestehender Konten kann nicht geändert werden");
+    }
+    if (
+      (await kv.atomic().check(current, index)
+        .set(current.key, { ...user, email })
+        .set(index.key, user.id).commit()).ok
+    ) return;
+  }
+  throw new Error("Benutzer konnte nicht gespeichert werden");
 }
 
 export async function getUserByEmail(email: string): Promise<User | null> {
   const kv = await getKv();
-  const emailNormalized = normalizeEmail(email);
+  const emailNormalized = parseMailbox(email);
+  if (!emailNormalized) return null;
   const idEntry = await kv.get<string>(["users_by_email", emailNormalized]);
   if (!idEntry.value) {
     return null;
   }
 
   const userEntry = await kv.get<User>(["users", idEntry.value]);
-  return userEntry.value;
+  return userEntry.value?.emailNormalized === emailNormalized
+    ? userEntry.value
+    : null;
 }
 
 export async function createUserFromEmail(
   email: string,
   role: UserRole,
 ): Promise<User> {
-  const existing = await getUserByEmail(email);
-  if (existing) {
-    return existing;
-  }
-
+  const emailNormalized = parseMailbox(email);
+  if (!emailNormalized) throw new Error("E-Mail ungültig");
+  const kv = await getKv();
   const now = new Date().toISOString();
   const user: User = {
     id: crypto.randomUUID(),
-    email: email.trim(),
-    emailNormalized: normalizeEmail(email),
+    email: emailNormalized,
+    emailNormalized,
     role,
     authVersion: 1,
     active: true,
     createdAt: now,
   };
 
-  await upsertUser(user);
-  return user;
+  for (let attempt = 0; attempt < 10; attempt++) {
+    const index = await kv.get<string>(["users_by_email", emailNormalized], {
+      consistency: "strong",
+    });
+    if (index.value) {
+      const existing = await getUserByEmail(emailNormalized);
+      if (existing) return existing;
+      // Repair an orphaned index only with its observed version.
+    }
+    if (
+      (await kv.atomic().check(index)
+        .set(["users", user.id], user)
+        .set(index.key, user.id).commit()).ok
+    ) return user;
+  }
+  throw new Error("Benutzer konnte nicht angelegt werden");
 }
 
 export async function ensureInitialAdminUser(
@@ -107,18 +143,20 @@ export async function getUserById(userId: string): Promise<User | null> {
 
 export async function deleteUserById(userId: string): Promise<boolean> {
   const kv = await getKv();
-  const userEntry = await kv.get<User>(["users", userId], {
-    consistency: "strong",
-  });
-  if (!userEntry.value) {
-    return false;
+  for (let attempt = 0; attempt < 10; attempt++) {
+    const userEntry = await kv.get<User>(["users", userId], {
+      consistency: "strong",
+    });
+    if (!userEntry.value) return false;
+    const index = await kv.get<string>([
+      "users_by_email",
+      userEntry.value.emailNormalized,
+    ], { consistency: "strong" });
+    let tx = kv.atomic().check(userEntry, index).delete(userEntry.key);
+    if (index.value === userId) tx = tx.delete(index.key);
+    if ((await tx.commit()).ok) return true;
   }
-
-  await kv.atomic()
-    .delete(["users", userId])
-    .delete(["users_by_email", userEntry.value.emailNormalized])
-    .commit();
-  return true;
+  throw new Error("Benutzer konnte nicht gelöscht werden");
 }
 
 export async function listUsers(): Promise<User[]> {

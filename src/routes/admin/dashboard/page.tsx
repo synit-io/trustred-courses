@@ -1,3 +1,5 @@
+import { formatAppDateTime } from "@/lib/time.ts";
+import { parsePage } from "@/src/routes/shared/helpers.ts";
 import {
   queryRegistrationRows,
   type RegistrationDashboardFilters,
@@ -25,16 +27,12 @@ export const adminDashboardPage = new Hono<AppEnv>().get(
       dateTo: c.req.query("dateTo") ?? undefined,
     };
 
-    const { rows, courses: filterCourses } = await queryRegistrationRows(
-      filters,
-    );
+    const { rows, courses: filterCourses, stats, page, pageSize, total } =
+      await queryRegistrationRows(
+        filters,
+        { page: parsePage(c.req.query("page") ?? null), pageSize: 50 },
+      );
 
-    const stats = {
-      total: rows.length,
-      pending: rows.filter((row) => row.status === "pending_review").length,
-      waitlisted: rows.filter((row) => row.status === "waitlisted").length,
-      approved: rows.filter((row) => row.status === "approved").length,
-    };
     const canManageCourses = sessionUser
       ? hasRole(sessionUser.role, "admin")
       : false;
@@ -55,10 +53,9 @@ export const adminDashboardPage = new Hono<AppEnv>().get(
                 : ""}
               {resetState
                 ? ` Letzter Reset: ${
-                  new Date(resetState.resetAt).toLocaleString("de-DE", {
+                  formatAppDateTime(resetState.resetAt, {
                     dateStyle: "medium",
                     timeStyle: "short",
-                    timeZone: "Europe/Berlin",
                   })
                 } Uhr.`
                 : ""} Löschen von Kursen und Benutzern ist deaktiviert.
@@ -362,12 +359,17 @@ export const adminDashboardPage = new Hono<AppEnv>().get(
           >
             <input
               class="input-field"
+              aria-label="Suche nach Name, E-Mail oder Kurs"
               name="q"
               placeholder="Suche nach Name, E-Mail oder Kurs"
               type="text"
               value={filters.q ?? ""}
             />
-            <select class="select-field" name="status">
+            <select
+              aria-label="Anmeldestatus"
+              class="select-field"
+              name="status"
+            >
               <option
                 selected={(filters.status ?? "all") === "all"}
                 value="all"
@@ -405,7 +407,11 @@ export const adminDashboardPage = new Hono<AppEnv>().get(
                 {toRegistrationStatusLabel("cancelled")}
               </option>
             </select>
-            <select class="select-field" name="courseId">
+            <select
+              aria-label="Kurs filtern"
+              class="select-field"
+              name="courseId"
+            >
               <option
                 selected={(filters.courseId ?? "all") === "all"}
                 value="all"
@@ -424,12 +430,14 @@ export const adminDashboardPage = new Hono<AppEnv>().get(
             </select>
             <input
               class="input-field"
+              aria-label="Eingang ab Datum"
               name="dateFrom"
               type="date"
               value={filters.dateFrom ?? ""}
             />
             <input
               class="input-field"
+              aria-label="Eingang bis Datum"
               name="dateTo"
               type="date"
               value={filters.dateTo ?? ""}
@@ -450,6 +458,50 @@ export const adminDashboardPage = new Hono<AppEnv>().get(
 
         <section class="site-card p-4 sm:p-5">
           <h2 class="text-2xl">Anmeldungen</h2>
+          <p class="text-body-muted mt-2 text-sm">
+            {total} Einträge · Seite {page} von{" "}
+            {Math.max(1, Math.ceil(total / pageSize))}
+          </p>
+          <nav aria-label="Anmeldungen Seiten" class="mt-3 flex gap-2">
+            {page > 1
+              ? (
+                <a
+                  class="btn-secondary btn-sm"
+                  href={`?${new URLSearchParams(
+                    {
+                      q: filters.q ?? "",
+                      status: filters.status ?? "all",
+                      courseId: filters.courseId ?? "all",
+                      dateFrom: filters.dateFrom ?? "",
+                      dateTo: filters.dateTo ?? "",
+                      page: String(page - 1),
+                    } as Record<string, string>,
+                  )}`}
+                >
+                  Zurück
+                </a>
+              )
+              : null}
+            {page * pageSize < total
+              ? (
+                <a
+                  class="btn-secondary btn-sm"
+                  href={`?${new URLSearchParams(
+                    {
+                      q: filters.q ?? "",
+                      status: filters.status ?? "all",
+                      courseId: filters.courseId ?? "all",
+                      dateFrom: filters.dateFrom ?? "",
+                      dateTo: filters.dateTo ?? "",
+                      page: String(page + 1),
+                    } as Record<string, string>,
+                  )}`}
+                >
+                  Weiter
+                </a>
+              )
+              : null}
+          </nav>
           <div class="data-table-wrap mt-4">
             <table class="data-table">
               <thead>
@@ -474,7 +526,7 @@ export const adminDashboardPage = new Hono<AppEnv>().get(
                 {rows.map((row) => (
                   <tr key={row.id}>
                     <td>
-                      {new Date(row.submittedAt).toLocaleString("de-DE")}
+                      {formatAppDateTime(row.submittedAt)}
                     </td>
                     <td>
                       <div class="font-semibold">

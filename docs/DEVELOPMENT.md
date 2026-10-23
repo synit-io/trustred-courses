@@ -21,6 +21,7 @@ Important organization values:
 APP_NAME
 APP_TAGLINE
 APP_BASE_URL
+APP_TIME_ZONE
 INITIAL_ADMIN_EMAIL
 LEGAL_*
 ```
@@ -55,6 +56,22 @@ TRUSTED_CLIENT_IP_HEADER
 
 See [`.env.example`](../.env.example) for every setting, default, and allowed
 value.
+
+The organization timezone defaults to `Europe/Berlin`, independent of the host's
+timezone. Existing stored instants stay unchanged. Course input rejects missing
+or repeated local times at daylight-saving transitions; choose an unambiguous
+time. Email inputs accept one plain ASCII mailbox, with case normalized. Display
+names, comments, address lists and quoted local parts are rejected; plus tags
+and dots remain distinct.
+
+Course storage validates UTF-8 JSON size before writing: 24 KiB per course, 1
+KiB for title and 2 KiB for location. Audit and notification-event envelopes
+must fit 60 KiB; rendered course-change mail is checked against a 48 KiB budget
+before saving. These bounds leave room below Deno KV's per-value limit,
+including HTML escaping and delivery metadata. Oversized edits leave existing
+data intact. Legacy oversized records are preserved; if even their old audit
+representation exceeds the budget, an operator must shorten them through a
+controlled data repair before normal audited edits can resume.
 
 ## Local setup
 
@@ -195,6 +212,8 @@ refresh single files.
 | `deno task check`        | Check formatting, lint, and types                                     |
 | `deno task docker:build` | Build local `trustred-courses:latest` image                           |
 | `deno task test`         | Run automated tests                                                   |
+| `deno task test:runtime` | Exercise actual entrypoint processes and host-timezone isolation      |
+| `deno task test:config`  | Verify root Compose forwards every documented setting                 |
 | `deno task e2e`          | Run Dockerized end-to-end tests                                       |
 | `deno task seed`         | Create development users and courses                                  |
 | `deno task seed:demo`    | Add realistic demo data, requires `DEMO_MODE=true`                    |
@@ -211,9 +230,13 @@ Run repository checks and tests:
 ```bash
 deno task check
 deno task test
+deno task test:runtime
+deno task test:config
 ```
 
-CI runs both commands before end-to-end tests and image publication.
+CI runs these commands before end-to-end tests and image publication. Runtime
+tests use isolated temporary stores and sanitized environments. Configuration
+tests need Docker Compose but do not start containers.
 
 Run the end-to-end flow separately:
 
@@ -236,6 +259,12 @@ Automated coverage includes:
 - audit persistence
 - email templates and outbox retries
 - security helpers and magic-link authentication
+- concurrent checkout reservation, settlement recovery and legacy capture states
+- expired lease fencing, course deletion races and durable notification intent
+- oversized public catalogs and rejection of stale snapshot publication
+- mailbox validation, obsolete mail suppression and production debug-link gating
+- Berlin daylight-saving boundaries, historical currency totals and complete
+  history
 
 ## Runtime and deployment checks
 

@@ -26,7 +26,7 @@
     "jsr:@synitio/kv-magic-link-auth@0.4.0": "0.4.0",
     "jsr:@zip-js/zip-js@^2.7.52": "2.14.0",
     "npm:@tailwindcss/cli@4.3.3": "4.3.3",
-    "npm:nodemailer@10.1.0": "10.1.0",
+    "npm:nodemailer@10.1.4": "10.1.4",
     "npm:tailwindcss@4.3.3": "4.3.3"
   },
   "jsr": {
@@ -471,8 +471,8 @@
     "node-addon-api@7.1.1": {
       "integrity": "sha512-5m3bsyrjFWE1xf7nz7YXdN4udnVtXK6/Yfgn5qnahL6bCkf2yKt4k3nuTKAtT4r3IG8JNR2ncsIMdZuAzJjHQQ=="
     },
-    "nodemailer@10.1.0": {
-      "integrity": "sha512-fXW8AulB25aOTuwfRYV6lqHyfz2VM4rr4SGXH03mE7x5znEUpzL5mu6anARUpZN7744Ziwkmr4AxSLPJsBQspg=="
+    "nodemailer@10.1.4": {
+      "integrity": "sha512-EsMnOR2oRv4LGnWvHgcVYkkQ4O2j8KO4WTw6l+PHR4sOXo8SAgIraxtEnGDmotjbhv0hDsu3IuDIFZm8iXwO4A=="
     },
     "picocolors@1.1.1": {
       "integrity": "sha512-xceH2snhtb5M9liqDsmEw56le376mTZkEX/jEb/RxNFyegNul7eNslCXP9FDj/Lcu0X8KEyMceP2ntpaHrDEVA=="
@@ -501,7 +501,7 @@
       "jsr:@hono/hono@^4.13.13",
       "jsr:@std/assert@^1.0.19",
       "jsr:@synitio/kv-magic-link-auth@0.4.0",
-      "npm:nodemailer@10.1.0",
+      "npm:nodemailer@10.1.4",
       "npm:tailwindcss@4.3.3"
     ]
   }

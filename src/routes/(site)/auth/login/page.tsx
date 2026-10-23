@@ -1,4 +1,5 @@
 import { DEMO_ADMIN_ACCOUNT } from "@/lib/demo/accounts.ts";
+import { validatedDebugLink } from "@/lib/auth/debug_links.ts";
 import { isDemoMode } from "@/lib/env.ts";
 import type { AppEnv } from "@/src/app/context.ts";
 import { Hono } from "hono";
@@ -8,7 +9,10 @@ export const adminLoginPage = new Hono<AppEnv>().get("/login", (c) => {
 
   const sent = c.req.query("sent") === "1";
   const error = c.req.query("error") === "1";
-  const debugUrl = c.req.query("debug");
+  const debugUrl = validatedDebugLink(
+    c.req.query("debug"),
+    "/api/auth/magic-link/verify",
+  );
   const demoMode = isDemoMode();
 
   return c.render(

@@ -23,8 +23,9 @@ courses, registrations, and Deno KV data.
 | [`deploy.ts`](../deploy.ts)                         | Deno Deploy compatibility entrypoint        |
 | [`main.tsx`](../main.tsx)                           | Docker and runtime compatibility entrypoint |
 
-Local and Docker runtimes start `Deno.serve`. Deno Deploy exports the same Hono
-application as a fetch handler.
+Executable entrypoints start `Deno.serve` (port `8000`, or `PORT`). Both Deploy
+entrypoints also export the same fetch handler for `deno serve` and managed
+runners. Importing them does not start another listener.
 
 ## Application bootstrap
 
@@ -117,8 +118,11 @@ scans for ordinary page reads.
 Course and registration writes rebuild affected snapshots incrementally. A full
 rebuild function remains available for repair and tests.
 
-Incremental home-snapshot writes use Deno KV compare-and-set retries so
-concurrent course updates cannot overwrite each other.
+Each public course card and detail occupies its own KV value, so catalog size
+does not accumulate in one value. All course and registration writes advance a
+per-course revision. Publishers capture that revision before deriving the view
+and check it on commit, preventing stale calculations from replacing newer
+availability. Legacy aggregate snapshots are rebuilt lazily into this format.
 
 ## Authentication and authorization
 
@@ -149,27 +153,75 @@ Paid courses use server-side PayPal order creation and capture. Pending payment
 state is stored in KV, and a registration is finalized only after successful
 capture. Free courses do not require PayPal configuration.
 
-Payment creation, capture, and registration finalization use persisted states
-and stable PayPal request IDs. Replayed callbacks resume finalization instead of
-capturing again. Registration state transitions use per-course distributed locks
-plus version checks; state and audit records commit together.
+Payment creation reserves the registration fingerprint before contacting PayPal.
+Capture starts only after a checked, durable claim. Provider-pending and unknown
+outcomes retain their order, request ID and registration ID without a TTL;
+scheduled provider lookups recover settlement independently of browser returns.
+Ambiguous legacy records and conflicting captures remain available for manual
+review. A cancel callback only removes a provably uncaptured checkout.
+
+Registration state transitions use per-course distributed locks and checked
+course revisions. Capacity approvals check the lease in their final transaction;
+state, indexes, audit and notification intent commit together. Course deletion
+checks the same revision after inspecting registration and checkout references.
+
+Expired double-opt-in links can be reissued for the existing submitted record
+through `/api/registrations/resend-confirmation`. Reissue rotates the current
+token and queues mail atomically; obsolete queued links are suppressed before
+dispatch. Responses remain generic and rate limited.
+
+## Time and administration read models
+
+`APP_TIME_ZONE` defaults to `Europe/Berlin`. Course forms, displayed times,
+calendar-date filters and reminder dates use this organization zone. Storage
+remains UTC. Nonexistent or ambiguous wall times at daylight-saving transitions
+are rejected instead of silently selecting an instant.
+
+The dashboard uses course/status indexes or an ordered submission projection,
+with a checked lazy backfill for older records. It hydrates only the selected
+page; counts and text filters still scan relevant index entries. Course detail
+loads only its own registrations. The combined timeline pages all audit/email
+references before hydrating a page, without a 500-entry history cutoff.
+
+Revenue is grouped by the currency stored on each payment, including historical
+payments for courses later made free. CSV keeps the original 17 columns and
+appends `course_total_revenue_currency` and `course_revenue_by_currency` (JSON).
+The original aggregate is blank for mixed/unknown currencies. Row filters do not
+narrow full-course revenue totals. CSV output streams rows, while sorting and
+totals still materialize registration data in memory.
 
 ## Email and scheduled jobs
 
 Email delivery uses `nodemailer`. Failed deliveries can enter a KV-backed outbox
 for retry.
 
-Outbox workers claim jobs with expiring leases. Registration-action messages and
-double-opt-in messages are written durably with their owning state change;
-deterministic event keys prevent duplicate reminder jobs.
+Outbox workers claim one job near dispatch and recheck lease ownership before
+sending. SMTP has bounded connection and socket timeouts. Registration-action,
+double-opt-in and confirmation messages are written durably with their owning
+state change. Reminder jobs revalidate the current registration and course;
+deterministic event keys prevent duplicate queueing.
+
+Critical course changes commit the course, audit and one durable notification
+event atomically. A bounded worker fans out that event using per-recipient
+deduplication and a durable cursor. Recipients must still be approved when the
+worker visits them and must have registered before the event. Message content
+uses the course snapshot recorded with that change.
+
+SMTP delivery remains at least once: a process failure after remote acceptance
+but before local acknowledgement can duplicate a message. Six failed attempts
+move a job to a dead-letter record. Pending and leased jobs are never removed by
+age cleanup. Queue health reports backlog, due/leased counts, oldest pending
+timestamp and dead-letter count; due-job selection still scans the queue.
 
 [`lib/background/cron.ts`](../lib/background/cron.ts) registers:
 
-| Job                    | Schedule    | Purpose                                  |
-| ---------------------- | ----------- | ---------------------------------------- |
-| `email-outbox-retry`   | `0 * * * *` | Retry due email jobs hourly              |
-| `email-outbox-cleanup` | `0 3 * * *` | Remove eligible old outbox records daily |
-| `course-reminders`     | `0 7 * * *` | Send configured course reminders daily   |
+| Job                            | Schedule (UTC) | Purpose                                               |
+| ------------------------------ | -------------- | ----------------------------------------------------- |
+| `email-outbox-retry`           | `*/5 * * * *`  | Drain at most 200 jobs and log queue health           |
+| `email-dead-letter-cleanup`    | `0 3 * * *`    | Remove terminal failures after 30 days                |
+| `paypal-payment-recovery`      | `*/5 * * * *`  | Reconcile at most 20 pending checkouts                |
+| `course-notification-recovery` | `*/5 * * * *`  | Resume durable course notification fanout             |
+| `course-reminders`             | `0 7 * * *`    | Queue reminders due on the organization calendar date |
 
 Self-hosted runtime tasks enable `--unstable-kv` and `--unstable-cron`.
 

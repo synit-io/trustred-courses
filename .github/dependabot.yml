@@ -8,7 +8,9 @@ updates:
       - "dependencies"
 
   - package-ecosystem: "docker"
-    directory: "/e2e"
+    directories:
+      - "/"
+      - "/e2e"
     schedule:
       interval: "weekly"
     labels:

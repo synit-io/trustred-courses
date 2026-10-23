@@ -246,6 +246,12 @@ Deno.test("registration query does not truncate after 500 records", async () => 
 Deno.test("payment state survives capture and finalization", async () => {
   const { cleanup } = await setupKvTest("payment-state-");
   try {
+    await upsertCourse({
+      ...courseFixture("course"),
+      pricingType: "paid",
+      feeAmountCents: 1000,
+      feeCurrency: "EUR",
+    });
     const pending = {
       id: "pending",
       courseId: "course",

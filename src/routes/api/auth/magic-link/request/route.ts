@@ -1,6 +1,7 @@
 import { buildMagicLinkBindingSetCookie } from "@/lib/auth/cookies.ts";
 import { issueMagicLink } from "@/lib/auth/service.ts";
 import { env } from "@/lib/env.ts";
+import { parseMailbox } from "@/lib/email/mailbox.ts";
 import {
   extractRequestTraceContext,
   logger,
@@ -23,6 +24,9 @@ magicLinkRequestRoute.post("/", async (c) => {
   const trace = extractRequestTraceContext(c.req.raw.headers);
   const form = await c.req.formData();
   const email = form.get("email");
+  const normalizedEmail = typeof email === "string"
+    ? parseMailbox(email)
+    : null;
   const redirectTo = form.get("redirectTo");
   const bindingSecret = crypto.randomUUID();
   const maxAgeSeconds = env.magicLinkTtlMinutes * 60;
@@ -31,10 +35,8 @@ magicLinkRequestRoute.post("/", async (c) => {
     buildMagicLinkBindingSetCookie(bindingSecret, maxAgeSeconds),
   );
   if (
-    typeof email === "string" && email.trim() !== "" &&
-    email.trim().length <= 254
+    normalizedEmail
   ) {
-    const normalizedEmail = email.trim().toLowerCase();
     const requestIp = resolveAuthClientIp(c);
     if (!requestIp) {
       logger.warn("auth.magic_link.missing_request_ip", {
@@ -68,7 +70,7 @@ magicLinkRequestRoute.post("/", async (c) => {
       email: maskEmail(normalizedEmail),
     });
     const result = await issueMagicLink(
-      email,
+      normalizedEmail,
       typeof redirectTo === "string" ? redirectTo : undefined,
       {
         requestIp,

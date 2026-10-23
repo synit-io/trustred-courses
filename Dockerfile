@@ -13,6 +13,8 @@ COPY --from=builder /deno-dir /deno-dir
 COPY --from=builder /app/node_modules ./node_modules
 COPY deno.json deno.lock ./
 COPY main.tsx ./
+COPY deploy.ts ./
+COPY entrypoints ./entrypoints
 COPY src ./src
 COPY lib ./lib
 COPY assets ./assets

@@ -47,17 +47,46 @@ export async function appendAuditLog(
   return log;
 }
 
+export interface AuditLogReference {
+  id: string;
+  createdAt: string;
+}
+
+export async function listAuditLogReferencesByEntity(
+  entityType: string,
+  entityId: string,
+): Promise<AuditLogReference[]> {
+  const kv = await getKv();
+  const references: AuditLogReference[] = [];
+  for await (
+    const entry of kv.list({
+      prefix: ["audit_logs_by_entity", entityType, entityId],
+    }, { reverse: true })
+  ) {
+    references.push({
+      id: String(entry.key.at(-1)),
+      createdAt: String(entry.key.at(-2)),
+    });
+  }
+  return references;
+}
+
+export async function hydrateAuditLogs(ids: string[]): Promise<AuditLog[]> {
+  const kv = await getKv();
+  const logs: AuditLog[] = [];
+  for (const id of ids) {
+    const entry = await kv.get<AuditLog>(["audit_logs", id]);
+    if (entry.value) logs.push(entry.value);
+  }
+  return logs;
+}
+
 export async function listAuditLogsByEntity(
   entityType: string,
   entityId: string,
 ): Promise<AuditLog[]> {
-  const page = await listAuditLogsByEntityPaginated(
-    entityType,
-    entityId,
-    1,
-    500,
-  );
-  return page.items;
+  const references = await listAuditLogReferencesByEntity(entityType, entityId);
+  return await hydrateAuditLogs(references.map((reference) => reference.id));
 }
 
 export async function listAuditLogsByEntityPaginated(
@@ -66,30 +95,15 @@ export async function listAuditLogsByEntityPaginated(
   page = 1,
   pageSize = 10,
 ): Promise<AuditLogPage> {
-  const kv = await getKv();
-  const logs: AuditLog[] = [];
-
-  for await (
-    const indexEntry of kv.list<string>({
-      prefix: ["audit_logs_by_entity", entityType, entityId],
-    })
-  ) {
-    const logId = String(indexEntry.key.at(-1));
-    const logEntry = await kv.get<AuditLog>(["audit_logs", logId]);
-    if (logEntry.value) {
-      logs.push(logEntry.value);
-    }
-  }
-
-  const sorted = logs.sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+  const references = await listAuditLogReferencesByEntity(entityType, entityId);
   const safePage = Math.max(1, Math.floor(page));
-  const safePageSize = Math.max(1, Math.floor(pageSize));
+  const safePageSize = Math.max(1, Math.min(100, Math.floor(pageSize)));
   const start = (safePage - 1) * safePageSize;
-  const end = start + safePageSize;
-
   return {
-    items: sorted.slice(start, end),
-    total: sorted.length,
+    items: await hydrateAuditLogs(
+      references.slice(start, start + safePageSize).map((r) => r.id),
+    ),
+    total: references.length,
     page: safePage,
     pageSize: safePageSize,
   };

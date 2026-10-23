@@ -1,4 +1,13 @@
 import { ensurePayPalConfig, env } from "../env.ts";
+import {
+  bumpCourseRevision,
+  getCourseRevisionEntry,
+} from "../courses/revision.ts";
+import {
+  isRegistrationWindowOpen,
+  registrationFingerprint,
+} from "../registrations/service.ts";
+import type { Course } from "../types.ts";
 import { getKv } from "../kv/client.ts";
 
 export interface PaidRegistrationInput {
@@ -19,10 +28,24 @@ export interface PendingPaidRegistration {
   courseId: string;
   registrationInput: PaidRegistrationInput;
   paypalOrderId: string;
-  status: "creating" | "checkout_created" | "captured" | "finalized";
+  status:
+    | "creating"
+    | "checkout_created"
+    | "capture_started"
+    | "settlement_pending"
+    | "captured"
+    | "finalized"
+    | "requires_review";
+  fingerprint?: string;
+  reconcileAfter?: string;
+  reconcileOwner?: string;
+  /** Marks checkouts whose first capture is durably claimed by this version. */
+  captureStateVersion?: 1;
+  lastError?: string | null;
   registrationId: string;
   confirmationToken: string;
   capture?: PayPalCaptureResult;
+  capturePaidAt?: string;
   feeAmountCents: number;
   feeCurrency: string;
   createdAt: string;
@@ -192,21 +215,28 @@ export async function capturePayPalOrder(
   if (!response.ok) {
     throw new Error("PayPal-Zahlung konnte nicht abgeschlossen werden.");
   }
-  const payload = await response.json() as {
-    id?: string;
-    status?: string;
-    purchase_units?: Array<{
-      custom_id?: string;
-      payments?: {
-        captures?: Array<{
-          id?: string;
-          status?: string;
-          amount?: { value?: string; currency_code?: string };
-        }>;
-      };
-    }>;
-  };
+  return parsePayPalCapture(await response.json(), orderId);
+}
 
+interface PayPalOrderPayload {
+  id?: string;
+  status?: string;
+  purchase_units?: Array<{
+    custom_id?: string;
+    payments?: {
+      captures?: Array<{
+        id?: string;
+        status?: string;
+        amount?: { value?: string; currency_code?: string };
+      }>;
+    };
+  }>;
+}
+
+function parsePayPalCapture(
+  payload: PayPalOrderPayload,
+  orderId: string,
+): PayPalCaptureResult {
   const purchaseUnit = payload.purchase_units?.[0];
   const capture = purchaseUnit?.payments?.captures?.[0];
   const currency = capture?.amount?.currency_code?.toUpperCase() ?? "";
@@ -228,46 +258,167 @@ export async function capturePayPalOrder(
   };
 }
 
-const PENDING_REGISTRATION_TTL_MS = 24 * 60 * 60 * 1000;
+/** Read settlement without depending on a browser return or checkout expiry. */
+export async function getPayPalOrderCapture(
+  orderId: string,
+): Promise<PayPalCaptureResult | null> {
+  const token = await paypalAccessToken();
+  const response = await fetch(
+    `${paypalApiBaseUrl()}/v2/checkout/orders/${encodeURIComponent(orderId)}`,
+    {
+      headers: { Authorization: `Bearer ${token}` },
+    },
+  );
+  if (!response.ok) {
+    throw new Error("PayPal-Zahlungsstatus konnte nicht geladen werden.");
+  }
+  const payload = await response.json() as PayPalOrderPayload;
+  if (payload.id !== orderId) throw new Error("Ungültige PayPal-Bestellung.");
+  if (!payload.purchase_units?.[0]?.payments?.captures?.length) return null;
+  return parsePayPalCapture(payload, orderId);
+}
+
+export function pendingPaymentFingerprintKey(
+  courseId: string,
+  fingerprint: string,
+): Deno.KvKey {
+  return ["pending_paid_registration_fingerprints", courseId, fingerprint];
+}
 
 export async function savePendingPaidRegistration(
   pending: PendingPaidRegistration,
 ): Promise<void> {
   const kv = await getKv();
-  await kv.atomic()
-    .set(["pending_paid_registrations", pending.id], pending, {
-      expireIn: PENDING_REGISTRATION_TTL_MS,
+  const revision = await getCourseRevisionEntry(pending.courseId);
+  const course = await kv.get<Course>(["courses", pending.courseId]);
+  if (!course.value || course.value.status !== "active") {
+    throw new Error("Kurs nicht verfügbar.");
+  }
+  if (
+    !isRegistrationWindowOpen(course.value) ||
+    course.value.pricingType !== "paid" ||
+    course.value.feeAmountCents !== pending.feeAmountCents ||
+    course.value.feeCurrency?.toUpperCase() !==
+      pending.feeCurrency.toUpperCase()
+  ) {
+    throw new Error(
+      "Kurszahlung oder Anmeldezeitraum wurde geändert. Bitte lade den Kurs erneut.",
+    );
+  }
+  const fingerprint = await registrationFingerprint(pending.registrationInput);
+  const claim = await kv.get<string>(
+    pendingPaymentFingerprintKey(pending.courseId, fingerprint),
+  );
+  const existingRegistration = await kv.get<string>([
+    "registration_fingerprints",
+    pending.courseId,
+    fingerprint,
+  ]);
+  const existingPending = await kv.get<PendingPaidRegistration>([
+    "pending_paid_registrations",
+    pending.id,
+  ]);
+  if (claim.value || existingRegistration.value || existingPending.value) {
+    throw new Error(
+      "Eine identische Anmeldung oder Zahlung ist bereits vorhanden. Bitte nutze den vorhandenen Zahlungs- oder Bestätigungslink.",
+    );
+  }
+  // Existing checkouts predate fingerprint reservations. The revision captured
+  // before this scan fences a concurrent legacy finalization or cancellation.
+  for await (
+    const existing of kv.list<PendingPaidRegistration>({
+      prefix: ["pending_paid_registrations"],
     })
+  ) {
+    if (existing.value.courseId !== pending.courseId) continue;
+    const existingFingerprint = existing.value.fingerprint ??
+      await registrationFingerprint(existing.value.registrationInput);
+    if (existingFingerprint === fingerprint) {
+      throw new Error(
+        "Eine identische Anmeldung oder Zahlung ist bereits vorhanden.",
+      );
+    }
+  }
+  const stored = { ...pending, fingerprint, captureStateVersion: 1 as const };
+  const result = await bumpCourseRevision(
+    kv.atomic().check(course).check(claim).check(existingRegistration).check(
+      existingPending,
+    ),
+    revision,
+  )
+    .set(["pending_paid_registrations", pending.id], stored)
     .set(
       ["pending_paid_registrations_by_course", pending.courseId, pending.id],
       true,
-      {
-        expireIn: PENDING_REGISTRATION_TTL_MS,
-      },
     )
+    .set(claim.key, pending.id)
     .commit();
+  if (!result.ok) {
+    throw new Error(
+      "Anmeldung oder Kurs wurde gleichzeitig geändert. Bitte erneut versuchen.",
+    );
+  }
+}
+
+export async function getPendingPaidRegistrationEntry(
+  id: string,
+): Promise<Deno.KvEntryMaybe<PendingPaidRegistration>> {
+  return await (await getKv()).get<PendingPaidRegistration>([
+    "pending_paid_registrations",
+    id,
+  ], { consistency: "strong" });
 }
 
 export async function updatePendingPaidRegistration(
   pending: PendingPaidRegistration,
+  expected?: Deno.KvEntryMaybe<PendingPaidRegistration>,
 ): Promise<boolean> {
   const kv = await getKv();
-  const current = await kv.get<PendingPaidRegistration>(
-    ["pending_paid_registrations", pending.id],
-    { consistency: "strong" },
-  );
+  const current = expected ?? await getPendingPaidRegistrationEntry(pending.id);
   if (!current.value) return false;
-  return (await kv.atomic()
-    .check(current)
-    .set(["pending_paid_registrations", pending.id], pending, {
-      expireIn: PENDING_REGISTRATION_TTL_MS,
+  const previous = current.value;
+  const rank: Record<PendingPaidRegistration["status"], number> = {
+    creating: 0,
+    checkout_created: 1,
+    capture_started: 2,
+    settlement_pending: 3,
+    captured: 4,
+    finalized: 5,
+    requires_review: 5,
+  };
+  if (
+    previous.feeAmountCents !== pending.feeAmountCents ||
+    previous.feeCurrency !== pending.feeCurrency ||
+    JSON.stringify(previous.registrationInput) !==
+      JSON.stringify(pending.registrationInput) ||
+    (previous.capture?.status === "COMPLETED" &&
+      JSON.stringify(previous.capture) !== JSON.stringify(pending.capture)) ||
+    previous.courseId !== pending.courseId ||
+    previous.registrationId !== pending.registrationId ||
+    previous.confirmationToken !== pending.confirmationToken ||
+    (previous.paypalOrderId &&
+      previous.paypalOrderId !== pending.paypalOrderId) ||
+    rank[pending.status] < rank[previous.status] ||
+    (previous.status === "requires_review" &&
+      pending.status !== "requires_review") ||
+    (previous.status === "finalized" && pending.status !== "finalized")
+  ) return false;
+  const revision = await getCourseRevisionEntry(pending.courseId);
+  // Recovery states deliberately have no TTL: uncertain provider outcomes must survive outages.
+  return (await bumpCourseRevision(kv.atomic().check(current), revision)
+    .set(current.key, {
+      ...pending,
+      capturePaidAt: previous.capturePaidAt ??
+        (pending.capture?.status === "COMPLETED"
+          ? new Date().toISOString()
+          : undefined),
+      fingerprint: previous.fingerprint ?? pending.fingerprint,
+      captureStateVersion: previous.captureStateVersion ??
+        pending.captureStateVersion,
     })
     .set(
       ["pending_paid_registrations_by_course", pending.courseId, pending.id],
       true,
-      {
-        expireIn: PENDING_REGISTRATION_TTL_MS,
-      },
     )
     .commit()).ok;
 }
@@ -289,24 +440,35 @@ export async function hasPendingPaidRegistrationsForCourse(
 export async function getPendingPaidRegistration(
   id: string,
 ): Promise<PendingPaidRegistration | null> {
-  const kv = await getKv();
-  const entry = await kv.get<PendingPaidRegistration>([
-    "pending_paid_registrations",
-    id,
-  ], { consistency: "strong" });
-  return entry.value ?? null;
+  return (await getPendingPaidRegistrationEntry(id)).value;
 }
 
-export async function deletePendingPaidRegistration(id: string): Promise<void> {
+/** Only an uncaptured checkout can be removed; the checked read fences capture claims. */
+export async function deletePendingPaidRegistration(
+  id: string,
+  orderId?: string,
+): Promise<boolean> {
   const kv = await getKv();
-  const current = await getPendingPaidRegistration(id);
-  let tx = kv.atomic().delete(["pending_paid_registrations", id]);
-  if (current) {
-    tx = tx.delete([
+  const current = await getPendingPaidRegistrationEntry(id);
+  const pending = current.value;
+  if (
+    !pending || (orderId && pending.paypalOrderId !== orderId) ||
+    (pending.status !== "creating" && pending.status !== "checkout_created") ||
+    (pending.status === "checkout_created" && pending.captureStateVersion !== 1)
+  ) return false;
+  const revision = await getCourseRevisionEntry(pending.courseId);
+  let tx = bumpCourseRevision(kv.atomic().check(current), revision)
+    .delete(current.key)
+    .delete([
       "pending_paid_registrations_by_course",
-      current.courseId,
-      current.id,
+      pending.courseId,
+      pending.id,
     ]);
-  }
-  await tx.commit();
+  const fingerprint = pending.fingerprint ??
+    await registrationFingerprint(pending.registrationInput);
+  const claim = await kv.get<string>(
+    pendingPaymentFingerprintKey(pending.courseId, fingerprint),
+  );
+  if (claim.value === pending.id) tx = tx.check(claim).delete(claim.key);
+  return (await tx.commit()).ok;
 }

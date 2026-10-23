@@ -1,3 +1,4 @@
+import { formatAppDateTime } from "@/lib/time.ts";
 import { publicHomeContent } from "@/lib/content/public_home_content.ts";
 import { env } from "@/lib/env.ts";
 import { getPublicHomeSnapshot } from "@/lib/public_snapshot/service.ts";
@@ -47,7 +48,9 @@ export const homePage = new Hono<AppEnv>().get("/", async (c) => {
             <article class="site-card stat-card">
               <p class="stat-number stat-number-sm">
                 {nextCourse
-                  ? new Date(nextCourse.startsAt).toLocaleDateString("de-DE")
+                  ? formatAppDateTime(nextCourse.startsAt, {
+                    dateStyle: "short",
+                  })
                   : "Wird veröffentlicht"}
               </p>
               <p class="stat-label">Nächster Termin</p>
@@ -114,7 +117,7 @@ export const homePage = new Hono<AppEnv>().get("/", async (c) => {
                   </div>
                   <h3 class="mt-4 text-2xl">{course.title}</h3>
                   <p class="course-meta mt-2">
-                    {new Date(course.startsAt).toLocaleString("de-DE", {
+                    {formatAppDateTime(course.startsAt, {
                       dateStyle: "medium",
                       timeStyle: "short",
                     })} · {course.location}
@@ -128,11 +131,10 @@ export const homePage = new Hono<AppEnv>().get("/", async (c) => {
                         <article class="fact-tile">
                           <p class="text-label">Anmeldung bis</p>
                           <p class="metric-value mt-1 text-sm font-semibold">
-                            {new Date(course.registrationClosesAt)
-                              .toLocaleString("de-DE", {
-                                dateStyle: "medium",
-                                timeStyle: "short",
-                              })}
+                            {formatAppDateTime(course.registrationClosesAt, {
+                              dateStyle: "medium",
+                              timeStyle: "short",
+                            })}
                           </p>
                         </article>
                       )

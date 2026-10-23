@@ -8,6 +8,7 @@ import {
 import type { Course } from "@/lib/types.ts";
 import type { RegistrationEmailEvent } from "@/lib/email/templates.ts";
 import { env } from "@/lib/env.ts";
+import { formatAppDatetimeLocal, parseAppLocalDateTime } from "@/lib/time.ts";
 
 const sensitiveQueryKeys = new Set([
   "token",
@@ -104,7 +105,7 @@ type ConnectionEnv = {
 
 /** Trusted proxy header when configured; otherwise the Deno connection peer.
  * kv-magic-link-auth 0.4.0 rejects a missing address. */
-export function resolveAuthClientIp(c: Context): string | null {
+export function resolveClientIp(c: Context): string | null {
   if (env.trustedClientIpHeader) {
     return extractRequestIp(c.req.raw.headers);
   }
@@ -112,6 +113,8 @@ export function resolveAuthClientIp(c: Context): string | null {
     ?.trim() ?? "";
   return hostname || null;
 }
+
+export const resolveAuthClientIp = resolveClientIp;
 
 export function capacityView(total: number, approved: number): {
   total: number;
@@ -154,11 +157,7 @@ export function slugifyCourseTitle(title: string): string {
 }
 
 function parseLocalDateTimeToIso(value: string): string | null {
-  const trimmed = value.trim();
-  if (!trimmed) return null;
-  const date = new Date(trimmed);
-  if (Number.isNaN(date.getTime())) return null;
-  return date.toISOString();
+  return parseAppLocalDateTime(value);
 }
 
 export function parseCoursePayload(form: FormData): {
@@ -200,7 +199,9 @@ export function parseCoursePayload(form: FormData): {
   const registrationClosesAt = parseLocalDateTimeToIso(registrationClosesAtRaw);
 
   if (!startsAt || !endsAt || !registrationOpensAt || !registrationClosesAt) {
-    throw new Error("ungültiges Datum für Kurs oder Anmeldezeitraum.");
+    throw new Error(
+      "Ungültige oder durch die Zeitumstellung mehrdeutige Uhrzeit für Kurs oder Anmeldezeitraum.",
+    );
   }
   if (Date.parse(endsAt) <= Date.parse(startsAt)) {
     throw new Error("Kursende muss nach dem Kursbeginn liegen.");
@@ -300,13 +301,7 @@ export function formatCourseFee(
 }
 
 export function formatIsoForDatetimeLocal(value: string | null): string {
-  if (!value) return "";
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return "";
-  const pad = (num: number) => String(num).padStart(2, "0");
-  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${
-    pad(date.getDate())
-  }T${pad(date.getHours())}:${pad(date.getMinutes())}`;
+  return formatAppDatetimeLocal(value);
 }
 
 export function registrationWindowState(

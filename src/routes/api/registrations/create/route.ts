@@ -1,3 +1,4 @@
+import { parseMailbox } from "@/lib/email/mailbox.ts";
 import { getCourseById } from "@/lib/courses/repository.ts";
 import { env, isDebugLinkExposureEnabled, isDemoMode } from "@/lib/env.ts";
 import {
@@ -18,7 +19,7 @@ import {
   submitRegistrationWithDoubleOptIn,
 } from "@/lib/registrations/service.ts";
 import type { AppEnv } from "@/src/app/context.ts";
-import { extractRequestIp, maskEmail } from "@/src/routes/shared/helpers.ts";
+import { maskEmail, resolveClientIp } from "@/src/routes/shared/helpers.ts";
 import { Hono } from "hono";
 import { bodyLimit } from "hono/body-limit";
 
@@ -34,10 +35,6 @@ const FIELD_LIMITS: Record<string, number> = {
   email: 254,
   phone: 50,
 };
-
-function isValidEmail(value: string): boolean {
-  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value);
-}
 
 export const registrationCreateRoute = new Hono<AppEnv>();
 
@@ -90,11 +87,13 @@ registrationCreateRoute.post(
         phone: readOptional("phone"),
         consentAccepted: form.get("consentAccepted") === "on",
       };
-      if (!isValidEmail(registrationInput.email)) {
-        throw new Error("E-Mail-Adresse ist ungültig.");
+      const mailbox = parseMailbox(registrationInput.email);
+      if (!mailbox) throw new Error("E-Mail-Adresse ist ungültig.");
+      registrationInput.email = mailbox;
+      const requestIp = resolveClientIp(c);
+      if (!requestIp) {
+        throw new Error("Anfrageadresse konnte nicht ermittelt werden.");
       }
-
-      const requestIp = extractRequestIp(c.req.raw.headers);
       const emailLimit = await enforceRateLimit(
         "registration:email",
         `${courseId}:${registrationInput.email.toLowerCase()}`,

@@ -6,8 +6,6 @@ import {
 import { appendAuditLog } from "@/lib/audit/repository.ts";
 import { deleteCourseById, getCourseById } from "@/lib/courses/repository.ts";
 import { rebuildPublicSnapshotsForCourse } from "@/lib/public_snapshot/service.ts";
-import { listRegistrationsByCourse } from "@/lib/registrations/repository.ts";
-import { hasPendingPaidRegistrationsForCourse } from "@/lib/payments/paypal.ts";
 import type { AppEnv } from "@/src/app/context.ts";
 import { Hono } from "hono";
 
@@ -35,21 +33,10 @@ export const adminCoursesDeleteRoute = new Hono<AppEnv>().post(
       );
     }
 
-    const registrations = await listRegistrationsByCourse(existing.id);
-    const hasPendingPayments = await hasPendingPaidRegistrationsForCourse(
-      existing.id,
-    );
-    if (registrations.length > 0 || hasPendingPayments) {
-      return c.redirect(
-        `/admin/courses/${existing.id}?course_error=Kurs+hat+bereits+Anmeldungen+und+kann+nicht+gelöscht+werden`,
-        303,
-      );
-    }
-
     const deleted = await deleteCourseById(existing.id);
     if (!deleted) {
       return c.redirect(
-        "/admin/courses?course_error=Kurs+nicht+gefunden",
+        `/admin/courses/${existing.id}?course_error=Kurs+hat+Anmeldungen+oder+Zahlungen+oder+wurde+gleichzeitig+geändert`,
         303,
       );
     }

@@ -42,6 +42,7 @@ NODE_ENV="production"
 APP_NAME="TrustRed Courses"
 APP_TAGLINE="Ausbildung. Termine. Anmeldung."
 APP_BASE_URL="https://courses.example.org"
+APP_TIME_ZONE="Europe/Berlin"
 INITIAL_ADMIN_EMAIL="admin@example.org"
 KV_PATH=".data/trustred-courses.kv"
 
@@ -76,6 +77,12 @@ chmod 600 .env
 
 See [`.env.example`](../.env.example) for session, rate-limit, embedding,
 logging, and optional PayPal settings.
+
+`APP_TIME_ZONE` controls course input, display, date filters and reminders;
+stored UTC timestamps are preserved. Review displayed times after changing this
+setting. The repository's root Compose file forwards every documented feature
+setting, including PayPal, legal information and embedding origins. `.env` files
+remain excluded from Docker images.
 
 Create `docker-compose.yml`:
 
@@ -122,6 +129,10 @@ TRUSTED_CLIENT_IP_HEADER="x-real-ip"
 ```
 
 Only expose ports `80` and `443` publicly. Port `8000` stays bound to localhost.
+
+With an empty `TRUSTED_CLIENT_IP_HEADER`, direct runtimes use the connection's
+peer address and ignore forwarded headers. When a header is configured, the
+proxy must supply it on every relevant request; missing values fail closed.
 
 ## Persistent data
 
@@ -186,6 +197,28 @@ Common causes:
 - PayPal checkout unavailable: set `PAYPAL_ENVIRONMENT`, `PAYPAL_CLIENT_ID`, and
   `PAYPAL_CLIENT_SECRET`
 - iframe blocked: configure `EMBED_ALLOWED_ORIGINS` with allowed origins
+
+### Payments and queued mail
+
+Payment recovery runs every five minutes. A pending or unknown capture survives
+the browser checkout timeout and is checked against PayPal without requiring
+another participant submission. Existing ambiguous captures are retained as
+`requires_review`; they are not automatically refunded or replaced by a new
+charge. Investigate `payment.manual_review_required` and
+`payment.reconciliation_failed` logs, then reconcile the retained order/capture
+IDs with the provider and the registration before making a manual correction.
+The application does not provide an operator adjudication UI.
+
+Unconfirmed participants can request a fresh confirmation link on the course
+page using their email. This keeps the existing registration and payment.
+
+Email retry runs every five minutes, with up to 200 jobs per run. Queue-health
+logs expose pending, due and leased counts, oldest pending time and dead-letter
+count. Six failed attempts move mail to `email_dead_letters`; these records are
+retained for 30 days after failure. Active jobs are never deleted solely because
+of age. Inspect failed recipients and SMTP configuration before manually
+requeueing a terminal failure. SMTP delivery is at least once, so crash recovery
+can still duplicate an already accepted message.
 
 ## Demo instance
 
