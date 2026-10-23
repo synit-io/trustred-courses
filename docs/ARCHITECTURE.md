@@ -25,7 +25,11 @@ courses, registrations, and Deno KV data.
 
 Executable entrypoints start `Deno.serve` (port `8000`, or `PORT`). Both Deploy
 entrypoints also export the same fetch handler for `deno serve` and managed
-runners. Importing them does not start another listener.
+runners. Importing them does not start another listener. The standalone fallback
+runs on the load event only when the default handler's `onListen` has not
+already reported a CLI-managed listener. This keeps `deno run` and `deno serve`
+compatible without binding the same port twice; CLI `--host` and `--port` remain
+authoritative.
 
 ## Application bootstrap
 
