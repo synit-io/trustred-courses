@@ -37,9 +37,9 @@
     "@/": "./",
     "@synitio/kv-magic-link-auth": "jsr:@synitio/kv-magic-link-auth@0.4.0",
     "@std/assert": "jsr:@std/assert@^1.0.19",
-    "hono": "jsr:@hono/hono@^4.13.16",
-    "nodemailer": "npm:nodemailer@10.3.1",
-    "tailwindcss": "npm:tailwindcss@4.3.3"
+    "hono": "jsr:@hono/hono@^4.13.17",
+    "nodemailer": "npm:nodemailer@10.4.0",
+    "tailwindcss": "npm:tailwindcss@4.3.5"
   },
   "compilerOptions": {
     "lib": [
